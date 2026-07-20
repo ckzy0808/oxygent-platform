@@ -16,7 +16,11 @@
     <link rel="stylesheet" href="./css/agent-list.css"/>
     <link rel="stylesheet" href="./css/timeline.css"/>
     <link rel="stylesheet" href="./css/guide.css"/>
+    <link rel="stylesheet" href="./css/app-shell.css"/>
+    <link rel="stylesheet" href="./css/chat-modes.css"/>
     <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
+    <script src="./js/app-shell.js" defer></script>
+    <script src="./js/chat-modes.js" defer></script>
     <script src="./js/utils.js"></script>
     <script src="./js/marked.min.js"></script>
     <script src="./js/agent_tree.js"></script>
@@ -25,7 +29,7 @@
     <script src="./js/message.js"></script>
     <script src="./js/timeline.js"></script>
 </head>
-<body class="timeline-hidden tracegraph-hidden">
+<body class="timeline-hidden tracegraph-hidden" data-oxygent-page="chat">
 <div class="header">
     <div class="header-left">
         <img class="header-left-img" src="./image/group-favicon.png" alt="">
@@ -179,6 +183,35 @@
                     </div>
                 </div> -->
                 <div class="chat-agent-list" id="chatAgentList" style="display:none;"></div>
+
+                <div class="chat-mode-shell" id="chat-mode-shell">
+                    <div class="chat-mode-row">
+                        <div class="chat-mode-switcher" role="group" aria-label="Chat mode">
+                            <button type="button" class="chat-mode-button active" data-chat-mode="general" aria-pressed="true">General</button>
+                            <button type="button" class="chat-mode-button" data-chat-mode="research" aria-pressed="false">Research</button>
+                            <button type="button" class="chat-mode-button" data-chat-mode="data" aria-pressed="false">Data</button>
+                            <button type="button" class="chat-mode-button" data-chat-mode="code" aria-pressed="false">Code</button>
+                        </div>
+                        <button type="button" class="chat-project-action" disabled title="Project Tasks are enabled in PR 2">Convert to Project Task</button>
+                    </div>
+                    <div class="code-mode-panel" id="code-mode-panel">
+                        <div class="code-mode-fields">
+                            <div class="code-mode-field"><label for="code-repository">Repository</label><select id="code-repository" disabled><option>Configure in Code Workspace</option></select></div>
+                            <div class="code-mode-field"><label for="code-base-branch">Base branch</label><select id="code-base-branch" disabled><option>Available in PR 5</option></select></div>
+                            <div class="code-mode-field"><label for="code-workflow">Workflow</label><select id="code-workflow" disabled><option>Available in PR 4</option></select></div>
+                            <div class="code-mode-field"><label for="code-agent-team">Agent team</label><select id="code-agent-team" disabled><option>Available in PR 3</option></select></div>
+                        </div>
+                        <div class="code-quick-actions" aria-label="Code task shortcuts">
+                            <button type="button" class="code-quick-action">Fix a bug</button>
+                            <button type="button" class="code-quick-action">Add a feature</button>
+                            <button type="button" class="code-quick-action">Refactor code</button>
+                            <button type="button" class="code-quick-action">Write tests</button>
+                            <button type="button" class="code-quick-action">Review changes</button>
+                            <button type="button" class="code-quick-action">Explain repository</button>
+                        </div>
+                        <p class="code-mode-note">PR 1 provides the workspace entry only. Repository execution remains disabled until the isolated worktree foundation is available.</p>
+                    </div>
+                </div>
 
                 <!-- agentlist popup -->
                 <div id="chat-at-list-container-id" class="chat-at-list-container">
@@ -2827,7 +2860,7 @@
     }
 
     window.onbeforeunload = function () {
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
             ws.close();
         }
     };

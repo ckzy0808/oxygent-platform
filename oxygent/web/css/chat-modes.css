@@ -1,0 +1,141 @@
+.chat-mode-shell {
+    margin: 0 0 10px;
+}
+
+.chat-mode-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.chat-mode-switcher {
+    display: inline-flex;
+    gap: 3px;
+    padding: 3px;
+    border-radius: 8px;
+    background: #f2f4f7;
+}
+
+.chat-mode-button {
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: #667085;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.chat-mode-button:hover {
+    color: #344054;
+}
+
+.chat-mode-button.active {
+    background: #fff;
+    color: #1849a9;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12);
+}
+
+.chat-project-action {
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 6px 9px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    color: #667085;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.chat-project-action[disabled] {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
+.code-mode-panel {
+    display: none;
+    margin-top: 9px;
+    padding: 10px;
+    border: 1px solid #c7d7fe;
+    border-radius: 9px;
+    background: #f8faff;
+}
+
+.code-mode-panel.visible {
+    display: block;
+}
+
+.code-mode-fields {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.code-mode-field {
+    min-width: 0;
+}
+
+.code-mode-field label {
+    display: block;
+    margin-bottom: 3px;
+    color: #475467;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.code-mode-field select {
+    width: 100%;
+    height: 30px;
+    padding: 0 7px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: #fff;
+    color: #98a2b3;
+    font-size: 11px;
+}
+
+.code-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 8px;
+}
+
+.code-quick-action {
+    padding: 5px 8px;
+    border: 1px solid #b2ccff;
+    border-radius: 999px;
+    background: #fff;
+    color: #3538cd;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.code-mode-note {
+    margin: 7px 0 0;
+    color: #667085;
+    font-size: 10px;
+}
+
+@media (max-width: 1100px) {
+    .code-mode-fields {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 700px) {
+    .chat-mode-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .chat-project-action {
+        margin-left: 0;
+    }
+
+    .chat-mode-switcher {
+        width: 100%;
+        overflow-x: auto;
+    }
+}
