@@ -72,6 +72,9 @@ def test_legacy_chat_contract_remains_present_with_mode_entry():
     for mode in ("general", "research", "data", "code"):
         assert f'data-chat-mode="{mode}"' in document
     assert "Convert to Project Task" in document
+    assert 'id="convert-project-task"' in document
+    assert "./js/api-client.js" in document
+    assert "projectTaskAttachmentReferences" in document
 
 
 def test_navigation_contains_the_required_information_architecture():
@@ -104,6 +107,19 @@ def test_workspace_skeleton_contains_project_model_and_code_sections():
         "Changes and Verification",
     ):
         assert label in script
+
+
+def test_projects_and_files_use_additive_platform_api_clients():
+    projects = read_web_file("projects.html")
+    files = read_web_file("files.html")
+    client = read_web_file("js/api-client.js")
+    conversion = read_web_file("js/chat-modes.js")
+
+    assert "./js/projects-page.js" in projects
+    assert "./js/files-page.js" in files
+    assert "../api/v1/platform" in client
+    assert "createTaskFromChat" in client
+    assert "the full transcript is not copied" in conversion
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from threading import RLock
 from typing import Annotated, Any, Literal, TypeAlias
 
 from pydantic import ConfigDict, Field
@@ -119,21 +120,25 @@ class InMemoryArtifactStore:
 
     def __init__(self) -> None:
         self._artifacts: dict[str, ArtifactBase] = {}
+        self._lock = RLock()
 
     def append(self, artifact: ArtifactBase) -> ArtifactBase:
-        if artifact.id in self._artifacts:
-            raise ValueError(f"artifact already exists: {artifact.id}")
-        self._artifacts[artifact.id] = artifact
+        with self._lock:
+            if artifact.id in self._artifacts:
+                raise ValueError(f"artifact already exists: {artifact.id}")
+            self._artifacts[artifact.id] = artifact
         return artifact
 
     def get(self, artifact_id: str) -> ArtifactBase:
-        try:
-            return self._artifacts[artifact_id]
-        except KeyError as exc:
-            raise KeyError(f"artifact not found: {artifact_id}") from exc
+        with self._lock:
+            try:
+                return self._artifacts[artifact_id]
+            except KeyError as exc:
+                raise KeyError(f"artifact not found: {artifact_id}") from exc
 
     def list(self, project_id: str | None = None) -> list[ArtifactBase]:
-        values = list(self._artifacts.values())
+        with self._lock:
+            values = list(self._artifacts.values())
         if project_id is None:
             return values
         return [artifact for artifact in values if artifact.project_id == project_id]
@@ -149,25 +154,26 @@ class InMemoryArtifactStore:
         model_id: str | None = None,
         validation_status: ValidationStatus = ValidationStatus.UNVALIDATED,
     ) -> ArtifactBase:
-        previous = self.get(artifact_id)
-        data = previous.model_dump()
-        data.update(
-            {
-                "id": generate_uuid(),
-                "content": content,
-                "producer_role": producer_role or previous.producer_role,
-                "producer_agent": producer_agent or previous.producer_agent,
-                "provider_id": provider_id or previous.provider_id,
-                "model_id": model_id or previous.model_id,
-                "source_artifact_ids": [
-                    *previous.source_artifact_ids,
-                    previous.id,
-                ],
-                "validation_status": validation_status,
-                "revision": previous.revision + 1,
-                "supersedes_artifact_id": previous.id,
-                "created_at": utc_now(),
-            }
-        )
-        revision = previous.__class__.model_validate(data)
-        return self.append(revision)
+        with self._lock:
+            previous = self.get(artifact_id)
+            data = previous.model_dump()
+            data.update(
+                {
+                    "id": generate_uuid(),
+                    "content": content,
+                    "producer_role": producer_role or previous.producer_role,
+                    "producer_agent": producer_agent or previous.producer_agent,
+                    "provider_id": provider_id or previous.provider_id,
+                    "model_id": model_id or previous.model_id,
+                    "source_artifact_ids": [
+                        *previous.source_artifact_ids,
+                        previous.id,
+                    ],
+                    "validation_status": validation_status,
+                    "revision": previous.revision + 1,
+                    "supersedes_artifact_id": previous.id,
+                    "created_at": utc_now(),
+                }
+            )
+            revision = previous.__class__.model_validate(data)
+            return self.append(revision)

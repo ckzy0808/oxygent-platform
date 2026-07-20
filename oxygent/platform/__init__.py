@@ -17,6 +17,7 @@ from .artifacts import (
     TaskNode,
     ValidationStatus,
 )
+from .api import ArtifactRevisionRequest, build_platform_router
 from .credentials import (
     CredentialResolver,
     EnvironmentCredentialResolver,
@@ -47,6 +48,22 @@ from .provider_adapters import (
     ProviderCallError,
     default_provider_adapters,
 )
+from .projects import (
+    InMemoryProjectRepository,
+    InMemoryProjectTaskRepository,
+    LocalEsProjectRepository,
+    LocalEsProjectTaskRepository,
+    Project,
+    ProjectCreate,
+    ProjectRepository,
+    ProjectStatus,
+    ProjectTask,
+    ProjectTaskFromChat,
+    ProjectTaskRepository,
+    ProjectTaskRisk,
+    ProjectTaskStatus,
+    ProjectUpdate,
+)
 from .registries import (
     AgentProfileRegistry,
     ModelRegistry,
@@ -63,6 +80,7 @@ from .routing import (
     ModelRoutingError,
     RoutingContext,
 )
+from .services import PlatformServices, ProjectActivity
 from .tracing import ExecutionTrace, InMemoryExecutionTraceStore, RouteDecisionTrace
 from .usage import InMemoryModelUsageStore, InvocationStatus, ModelUsage
 from .workflow import BasicRoleWorkflow
@@ -72,6 +90,7 @@ __all__ = [
     "AgentProfileRegistry",
     "ArchitectureDecision",
     "ArchitectureDecisionContent",
+    "ArtifactRevisionRequest",
     "Artifact",
     "ArtifactBase",
     "ArtifactType",
@@ -85,8 +104,12 @@ __all__ = [
     "InMemoryArtifactStore",
     "InMemoryExecutionTraceStore",
     "InMemoryModelUsageStore",
+    "InMemoryProjectRepository",
+    "InMemoryProjectTaskRepository",
     "InvocationStatus",
     "MappingCredentialResolver",
+    "LocalEsProjectRepository",
+    "LocalEsProjectTaskRepository",
     "ModelEvent",
     "ModelProfile",
     "ModelProviderAdapter",
@@ -105,6 +128,17 @@ __all__ = [
     "ProviderProfile",
     "ProviderRegistry",
     "ProviderType",
+    "Project",
+    "ProjectActivity",
+    "ProjectCreate",
+    "ProjectRepository",
+    "ProjectStatus",
+    "ProjectTask",
+    "ProjectTaskFromChat",
+    "ProjectTaskRepository",
+    "ProjectTaskRisk",
+    "ProjectTaskStatus",
+    "ProjectUpdate",
     "RegistryError",
     "RequirementSpec",
     "RequirementSpecContent",
@@ -124,6 +158,8 @@ __all__ = [
     "ToolPolicy",
     "ToolPolicyRegistry",
     "ValidationStatus",
+    "PlatformServices",
+    "build_platform_router",
     "default_provider_adapters",
     "default_role_definitions",
 ]

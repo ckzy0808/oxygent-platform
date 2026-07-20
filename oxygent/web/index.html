@@ -18,8 +18,10 @@
     <link rel="stylesheet" href="./css/guide.css"/>
     <link rel="stylesheet" href="./css/app-shell.css"/>
     <link rel="stylesheet" href="./css/chat-modes.css"/>
+    <link rel="stylesheet" href="./css/projects.css"/>
     <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
     <script src="./js/app-shell.js" defer></script>
+    <script src="./js/api-client.js" defer></script>
     <script src="./js/chat-modes.js" defer></script>
     <script src="./js/utils.js"></script>
     <script src="./js/marked.min.js"></script>
@@ -192,7 +194,7 @@
                             <button type="button" class="chat-mode-button" data-chat-mode="data" aria-pressed="false">Data</button>
                             <button type="button" class="chat-mode-button" data-chat-mode="code" aria-pressed="false">Code</button>
                         </div>
-                        <button type="button" class="chat-project-action" disabled title="Project Tasks are enabled in PR 2">Convert to Project Task</button>
+                        <button type="button" class="chat-project-action" id="convert-project-task" disabled title="Loading Projects">Convert to Project Task</button>
                     </div>
                     <div class="code-mode-panel" id="code-mode-panel">
                         <div class="code-mode-fields">
@@ -342,6 +344,7 @@
     var last_tool_call_name = "";
     var llm_is_work = false;
     var chats = [];
+    var projectTaskAttachmentReferences = [];
     var plan_dict = {};
     var nodeContentMap = {};
     var tool_calls = [];
@@ -2244,6 +2247,11 @@
 
             if (filesToUpload.length) {
                 payload.attachments = filesToUpload.map(({serverName}) => serverName);
+                payload.attachments.forEach(function (reference) {
+                    if (!projectTaskAttachmentReferences.includes(reference)) {
+                        projectTaskAttachmentReferences.push(reference);
+                    }
+                });
             }
 
             if (argentName) {
