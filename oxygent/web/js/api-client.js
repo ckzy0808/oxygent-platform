@@ -42,6 +42,26 @@
         },
         listActivity: function (projectId) {
             return request('/projects/' + encodeURIComponent(projectId) + '/activity');
-        }
+        },
+        listRoles: function () { return request('/roles'); },
+        listAgents: function () { return request('/agents'); },
+        listToolPolicies: function () { return request('/tool-policies'); },
+        listProviders: function () { return request('/providers'); },
+        createProvider: function (provider) {
+            return request('/providers', {method: 'POST', body: JSON.stringify(provider)});
+        },
+        updateProvider: function (providerId, provider) {
+            return request('/providers/' + encodeURIComponent(providerId), {
+                method: 'PATCH', body: JSON.stringify(provider)
+            });
+        },
+        testProvider: function (providerId, modelId) {
+            return request('/providers/' + encodeURIComponent(providerId) + '/test-connection', {
+                method: 'POST', body: JSON.stringify({modelId: modelId || null})
+            });
+        },
+        listModels: function () { return request('/models'); },
+        listRoutingPolicies: function () { return request('/routing-policies'); },
+        listUsage: function () { return request('/usage'); }
     };
 })();

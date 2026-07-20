@@ -13,6 +13,7 @@ from oxygent.utils.common_utils import generate_uuid
 
 from .artifacts import ArtifactBase, InMemoryArtifactStore, ValidationStatus
 from .common import PlatformModel, utc_now
+from .control_plane import PlatformControlPlane
 from .projects import (
     InMemoryProjectRepository,
     InMemoryProjectTaskRepository,
@@ -42,6 +43,7 @@ class PlatformServices:
     projects: ProjectRepository = field(default_factory=InMemoryProjectRepository)
     tasks: ProjectTaskRepository = field(default_factory=InMemoryProjectTaskRepository)
     artifacts: InMemoryArtifactStore = field(default_factory=InMemoryArtifactStore)
+    control_plane: PlatformControlPlane = field(default_factory=PlatformControlPlane)
     _activities: list[ProjectActivity] = field(default_factory=list, init=False)
     _activity_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
 

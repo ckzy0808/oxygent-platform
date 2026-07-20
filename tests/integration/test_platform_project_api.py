@@ -155,6 +155,10 @@ async def test_capabilities_and_nonempty_project_delete_guard(app: FastAPI):
             "chatToProjectTask": True,
             "codeWorkspace": False,
             "gitWorktrees": False,
+            "agents": True,
+            "models": True,
+            "controlPlaneConfigured": False,
+            "providerMutations": False,
         }
         project = (
             await client.post("/api/v1/platform/projects", json={"name": "Guarded"})

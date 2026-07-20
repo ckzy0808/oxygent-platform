@@ -23,6 +23,12 @@ from .credentials import (
     EnvironmentCredentialResolver,
     MappingCredentialResolver,
 )
+from .control_plane import (
+    PlatformControlPlane,
+    ProviderCreate,
+    ProviderHealthCheckRequest,
+    ProviderUpdate,
+)
 from .profiles import (
     AgentProfile,
     HealthStatus,
@@ -159,6 +165,10 @@ __all__ = [
     "ToolPolicyRegistry",
     "ValidationStatus",
     "PlatformServices",
+    "PlatformControlPlane",
+    "ProviderCreate",
+    "ProviderHealthCheckRequest",
+    "ProviderUpdate",
     "build_platform_router",
     "default_provider_adapters",
     "default_role_definitions",

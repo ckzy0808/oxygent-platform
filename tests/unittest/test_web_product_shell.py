@@ -122,6 +122,22 @@ def test_projects_and_files_use_additive_platform_api_clients():
     assert "the full transcript is not copied" in conversion
 
 
+def test_agents_and_models_use_sanitized_control_plane_views():
+    agents = read_web_file("agents.html")
+    models = read_web_file("models.html")
+    agent_script = read_web_file("js/agents-page.js")
+    model_script = read_web_file("js/models-page.js")
+    client = read_web_file("js/api-client.js")
+
+    assert "./js/agents-page.js" in agents
+    assert "./js/models-page.js" in models
+    assert "Why this model?" in agent_script
+    assert "Private model reasoning is never displayed" in agent_script
+    assert "credentialMask" in model_script
+    assert "Enter a secret reference, never an API key value" in model_script
+    assert "testProvider" in client
+
+
 @pytest.mark.asyncio
 async def test_all_product_pages_are_served_by_existing_static_mount():
     app = FastAPI()
