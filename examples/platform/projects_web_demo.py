@@ -469,6 +469,7 @@ async def build_services() -> PlatformServices:
                 "Technical Lead",
                 "Reviewer",
             ],
+            settings={"monthlyBudget": 0.05},
         )
     )
     requirement = services.artifacts.append(

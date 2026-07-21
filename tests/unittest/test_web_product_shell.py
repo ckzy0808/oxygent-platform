@@ -161,6 +161,23 @@ def test_workflow_timeline_uses_unified_events_and_hides_private_reasoning():
     assert "listWorkflowEvents" in client
 
 
+def test_insights_uses_recorded_usage_cost_and_safe_route_views():
+    document = read_web_file("insights.html")
+    script = read_web_file("js/insights-page.js")
+    client = read_web_file("js/api-client.js")
+
+    assert "./js/insights-page.js" in document
+    assert "./css/insights.css" in document
+    for section in ("Overview", "Usage", "Cost", "Reliability"):
+        assert section in script
+    assert "Estimated cost" in script
+    assert "Success rate" in script
+    assert "private model reasoning is never displayed" in script
+    assert "getInsightsSummary" in client
+    assert "getInsightsBreakdown" in client
+    assert "listInsightRuns" in client
+
+
 def test_code_workspace_uses_isolated_repository_apis_and_scope_contract():
     document = read_web_file("code.html")
     script = read_web_file("js/code-page.js")

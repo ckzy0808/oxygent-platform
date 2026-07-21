@@ -160,6 +160,7 @@ async def test_capabilities_and_nonempty_project_delete_guard(app: FastAPI):
             "agents": True,
             "models": True,
             "workflowTimeline": True,
+            "insights": True,
             "executionDrawer": True,
             "controlPlaneConfigured": False,
             "providerMutations": False,

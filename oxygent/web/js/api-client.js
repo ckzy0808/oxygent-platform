@@ -20,6 +20,15 @@
         return payload.data || {};
     }
 
+    function insightQuery(filters) {
+        var params = new URLSearchParams();
+        Object.keys(filters || {}).forEach(function (key) {
+            var value = filters[key];
+            if (value != null && value !== '') params.set(key, value);
+        });
+        return params.toString() ? '?' + params.toString() : '';
+    }
+
     window.OxyGentApp.api = {
         capabilities: function () { return request('/capabilities'); },
         listProjects: function () { return request('/projects'); },
@@ -63,6 +72,15 @@
         listModels: function () { return request('/models'); },
         listRoutingPolicies: function () { return request('/routing-policies'); },
         listUsage: function () { return request('/usage'); },
+        getInsightsSummary: function (filters) {
+            return request('/insights/summary' + insightQuery(filters));
+        },
+        getInsightsBreakdown: function (dimension, filters) {
+            return request('/insights/breakdown' + insightQuery(Object.assign({dimension: dimension}, filters || {})));
+        },
+        listInsightRuns: function (filters) {
+            return request('/insights/runs' + insightQuery(filters));
+        },
         listWorkflowRuns: function (filters) {
             var params = new URLSearchParams();
             filters = filters || {};

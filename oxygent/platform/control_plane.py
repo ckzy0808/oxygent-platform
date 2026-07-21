@@ -178,7 +178,9 @@ class PlatformControlPlane:
         return {
             "inputTokens": sum(record.input_tokens for record in records),
             "outputTokens": sum(record.output_tokens for record in records),
-            "estimatedCost": sum(record.estimated_cost for record in records),
+            "estimatedCost": sum(
+                record.estimated_cost for record in records if record.cost_available
+            ),
             "successRate": succeeded / len(records) if records else None,
             "invocations": len(records),
         }

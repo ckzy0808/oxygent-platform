@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from ipaddress import ip_address
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import Field
@@ -31,6 +32,14 @@ from .control_plane import (
     ProviderCreate,
     ProviderHealthCheckRequest,
     ProviderUpdate,
+)
+from .insights import (
+    InsightDimension,
+    InsightsQuery,
+    aggregate_usage,
+    breakdown_usage,
+    build_budget_snapshots,
+    filter_usage,
 )
 from .projects import ProjectCreate, ProjectTaskFromChat, ProjectUpdate
 from .registries import RegistryError
@@ -325,6 +334,7 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
                 "agents": True,
                 "models": True,
                 "workflowTimeline": True,
+                "insights": True,
                 "executionDrawer": True,
                 "controlPlaneConfigured": control.configured,
                 "providerMutations": control.allow_provider_mutations,
@@ -486,10 +496,191 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
             summary={
                 "inputTokens": sum(record.input_tokens for record in records),
                 "outputTokens": sum(record.output_tokens for record in records),
-                "estimatedCost": sum(record.estimated_cost for record in records),
+                "estimatedCost": sum(
+                    record.estimated_cost for record in records if record.cost_available
+                ),
+                "pricedInvocations": sum(record.cost_available for record in records),
+                "unpricedInvocations": sum(
+                    not record.cost_available for record in records
+                ),
                 "invocations": len(records),
             },
         )
+
+    async def insights_records(
+        *,
+        project_id: str | None,
+        role_id: str | None,
+        provider_id: str | None,
+        model_id: str | None,
+        run_id: str | None,
+        invocation_status: str | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> tuple[InsightsQuery, list[Any]]:
+        if project_id:
+            try:
+                await services.projects.get(project_id)
+            except KeyError as exc:
+                raise _not_found(exc) from exc
+        try:
+            query = InsightsQuery(
+                projectId=project_id,
+                roleId=role_id,
+                providerId=provider_id,
+                modelId=model_id,
+                runId=run_id,
+                status=invocation_status,
+                dateFrom=date_from,
+                dateTo=date_to,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+        return query, filter_usage(services.control_plane.usage.list(), query)
+
+    @router.get("/insights/summary")
+    async def insights_summary(
+        project_id: str | None = Query(default=None, alias="projectId"),
+        role_id: str | None = Query(default=None, alias="roleId"),
+        provider_id: str | None = Query(default=None, alias="providerId"),
+        model_id: str | None = Query(default=None, alias="modelId"),
+        run_id: str | None = Query(default=None, alias="runId"),
+        invocation_status: str | None = Query(default=None, alias="status"),
+        date_from: datetime | None = Query(default=None, alias="dateFrom"),
+        date_to: datetime | None = Query(default=None, alias="dateTo"),
+    ) -> dict[str, Any]:
+        query, records = await insights_records(
+            project_id=project_id,
+            role_id=role_id,
+            provider_id=provider_id,
+            model_id=model_id,
+            run_id=run_id,
+            invocation_status=invocation_status,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        projects = await services.projects.list()
+        if query.project_id:
+            projects = [
+                project for project in projects if project.id == query.project_id
+            ]
+        return _response(
+            totals=_dump(aggregate_usage(records)),
+            budgets=[
+                _dump(snapshot)
+                for snapshot in build_budget_snapshots(
+                    projects, services.control_plane.usage.list()
+                )
+            ],
+            range={
+                "dateFrom": query.date_from.isoformat() if query.date_from else None,
+                "dateTo": query.date_to.isoformat() if query.date_to else None,
+                "boundary": "inclusiveStartExclusiveEnd",
+            },
+        )
+
+    @router.get("/insights/breakdown")
+    async def insights_breakdown(
+        dimension: InsightDimension = Query(default=InsightDimension.PROJECT),
+        project_id: str | None = Query(default=None, alias="projectId"),
+        role_id: str | None = Query(default=None, alias="roleId"),
+        provider_id: str | None = Query(default=None, alias="providerId"),
+        model_id: str | None = Query(default=None, alias="modelId"),
+        run_id: str | None = Query(default=None, alias="runId"),
+        invocation_status: str | None = Query(default=None, alias="status"),
+        date_from: datetime | None = Query(default=None, alias="dateFrom"),
+        date_to: datetime | None = Query(default=None, alias="dateTo"),
+    ) -> dict[str, Any]:
+        _, records = await insights_records(
+            project_id=project_id,
+            role_id=role_id,
+            provider_id=provider_id,
+            model_id=model_id,
+            run_id=run_id,
+            invocation_status=invocation_status,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        projects = {
+            project.id: project.name for project in await services.projects.list()
+        }
+        control = services.control_plane
+
+        def label(target: InsightDimension, key: str) -> str:
+            if key == "unassigned":
+                return "Unassigned"
+            if target is InsightDimension.PROJECT:
+                return projects.get(key, key)
+            if target is InsightDimension.ROLE and control.roles.has(key):
+                return control.roles.get(key).name
+            if target is InsightDimension.PROVIDER and control.providers.has(key):
+                return control.providers.get(key).name
+            if target is InsightDimension.MODEL and control.models.has(key):
+                return control.models.get(key).display_name
+            return key
+
+        rows = breakdown_usage(records, dimension, label)
+        return _response(dimension=dimension.value, items=[_dump(row) for row in rows])
+
+    @router.get("/insights/runs")
+    async def insights_runs(
+        project_id: str | None = Query(default=None, alias="projectId"),
+        role_id: str | None = Query(default=None, alias="roleId"),
+        provider_id: str | None = Query(default=None, alias="providerId"),
+        model_id: str | None = Query(default=None, alias="modelId"),
+        run_id: str | None = Query(default=None, alias="runId"),
+        invocation_status: str | None = Query(default=None, alias="status"),
+        date_from: datetime | None = Query(default=None, alias="dateFrom"),
+        date_to: datetime | None = Query(default=None, alias="dateTo"),
+        limit: int = Query(default=25, ge=1, le=100),
+    ) -> dict[str, Any]:
+        _, records = await insights_records(
+            project_id=project_id,
+            role_id=role_id,
+            provider_id=provider_id,
+            model_id=model_id,
+            run_id=run_id,
+            invocation_status=invocation_status,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        route_decisions = services.control_plane.traces.route_decisions()
+        items = []
+        for record in records[:limit]:
+            route = next(
+                (
+                    item
+                    for item in reversed(route_decisions)
+                    if item.run_id == record.run_id
+                    and item.role_id == record.role_id
+                    and item.selected_model_id == record.model_id
+                ),
+                None,
+            )
+            items.append(
+                {
+                    **_dump(record),
+                    "failureReason": (
+                        "Provider call failed" if record.failure_reason else None
+                    ),
+                    "selectionReason": (
+                        _safe_route_reason(route.selection_reason)
+                        if route
+                        else "Recorded model invocation"
+                    ),
+                    "workflowUrl": (
+                        "workflows.html?runId=" + quote(record.run_id, safe="")
+                    ),
+                    "modelUrl": (
+                        "models.html?tab=usage&modelId="
+                        + quote(record.model_id, safe="")
+                    ),
+                }
+            )
+        return _response(items=items)
 
     @router.get("/workflows/runs")
     async def list_workflow_runs(
