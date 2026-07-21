@@ -87,7 +87,17 @@ from .routing import (
     RoutingContext,
 )
 from .services import PlatformServices, ProjectActivity
-from .tracing import ExecutionTrace, InMemoryExecutionTraceStore, RouteDecisionTrace
+from .tracing import (
+    EngineeringStatus,
+    ExecutionTrace,
+    InMemoryExecutionTraceStore,
+    RouteDecisionTrace,
+    WorkflowEvent,
+    WorkflowPhase,
+    WorkflowRunProjection,
+    WorkflowStageProjection,
+    project_workflow_run,
+)
 from .usage import InMemoryModelUsageStore, InvocationStatus, ModelUsage
 from .workflow import BasicRoleWorkflow
 
@@ -103,6 +113,7 @@ __all__ = [
     "BasicRoleWorkflow",
     "CredentialResolver",
     "EnvironmentCredentialResolver",
+    "EngineeringStatus",
     "ExecutionTrace",
     "GeminiAdapter",
     "HealthResult",
@@ -164,6 +175,10 @@ __all__ = [
     "ToolPolicy",
     "ToolPolicyRegistry",
     "ValidationStatus",
+    "WorkflowEvent",
+    "WorkflowPhase",
+    "WorkflowRunProjection",
+    "WorkflowStageProjection",
     "PlatformServices",
     "PlatformControlPlane",
     "ProviderCreate",
@@ -172,4 +187,5 @@ __all__ = [
     "build_platform_router",
     "default_provider_adapters",
     "default_role_definitions",
+    "project_workflow_run",
 ]

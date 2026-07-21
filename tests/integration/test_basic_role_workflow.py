@@ -216,6 +216,7 @@ async def test_four_role_workflow_creates_artifact_chain():
     ]
     assert len(usage.list()) == 4
     assert len(traces.route_decisions()) == 4
+    assert len(traces.workflow_events(run_id=response.output["runId"])) == 12
 
 
 @pytest.mark.asyncio

@@ -22,6 +22,7 @@ from .control_plane import (
 from .projects import ProjectCreate, ProjectTaskFromChat, ProjectUpdate
 from .registries import RegistryError
 from .services import PlatformServices
+from .tracing import EngineeringStatus
 
 
 class ArtifactRevisionRequest(PlatformModel):
@@ -78,12 +79,60 @@ def _safe_base_url(base_url: str) -> str:
 
 
 def _safe_route_reason(reason: str) -> str:
-    value = reason[:1000]
+    value = re.sub(r"(?i)\bbearer\s+[^;\s]+", "Bearer [redacted]", reason[:1000])
     return re.sub(
         r"(?i)(api[_-]?key|authorization|bearer|token)\s*[:=]\s*[^;\s]+",
         r"\1=[redacted]",
         value,
     )
+
+
+_WORKFLOW_PAYLOAD_FIELDS = {
+    "artifact",
+    "cost",
+    "durationMs",
+    "exitCode",
+    "message",
+    "runName",
+    "status",
+    "summary",
+    "toolName",
+    "toolsUsed",
+}
+
+
+def _safe_workflow_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return only product-safe event metadata, never prompts or raw output."""
+    safe: dict[str, Any] = {}
+    for key in _WORKFLOW_PAYLOAD_FIELDS:
+        if key not in payload:
+            continue
+        value = payload[key]
+        if key in {"summary", "message", "runName", "toolName"}:
+            safe[key] = _safe_route_reason(str(value))[:2000]
+        elif key == "toolsUsed" and isinstance(value, list):
+            safe[key] = [_safe_route_reason(str(item))[:160] for item in value[:50]]
+        elif key == "artifact" and isinstance(value, dict):
+            safe[key] = {
+                field: _safe_route_reason(str(value[field]))[:300]
+                for field in ("id", "type", "schemaVersion", "validationStatus")
+                if field in value
+            }
+        elif key == "status" and value in {
+            status_value.value for status_value in EngineeringStatus
+        }:
+            safe[key] = value
+        elif (
+            key in {"cost", "durationMs"}
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+        ):
+            safe[key] = max(0, value)
+        elif (
+            key == "exitCode" and isinstance(value, int) and not isinstance(value, bool)
+        ):
+            safe[key] = value
+    return safe
 
 
 def _provider_view(provider: Any) -> dict[str, Any]:
@@ -158,6 +207,43 @@ def _agent_view(control: PlatformControlPlane, profile: Any) -> dict[str, Any]:
     }
 
 
+def _workflow_run_view(control: PlatformControlPlane, run: Any) -> dict[str, Any]:
+    data = _dump(run)
+    data["name"] = _safe_route_reason(run.name)[:300]
+    for stage, stage_data in zip(run.stages, data["stages"]):
+        stage_data["summary"] = _safe_route_reason(stage.summary)[:2000]
+        stage_data["toolsUsed"] = [
+            _safe_route_reason(str(tool))[:160] for tool in stage.tools_used[:50]
+        ]
+        stage_data["artifact"] = (
+            _safe_workflow_payload({"artifact": stage.artifact}).get("artifact")
+            if stage.artifact
+            else None
+        )
+        stage_data["roleName"] = stage.role
+        if stage.role and control.roles.has(stage.role):
+            stage_data["roleName"] = control.roles.get(stage.role).name
+        stage_data["providerName"] = stage.provider_id or ""
+        if stage.provider_id and control.providers.has(stage.provider_id):
+            stage_data["providerName"] = control.providers.get(stage.provider_id).name
+        stage_data["modelName"] = stage.model_id or ""
+        if stage.model_id and control.models.has(stage.model_id):
+            stage_data["modelName"] = control.models.get(stage.model_id).display_name
+    return data
+
+
+def _workflow_event_view(control: PlatformControlPlane, event: Any) -> dict[str, Any]:
+    data = _dump(event)
+    data["payload"] = _safe_workflow_payload(event.payload)
+    data["providerName"] = event.provider_id or ""
+    if event.provider_id and control.providers.has(event.provider_id):
+        data["providerName"] = control.providers.get(event.provider_id).name
+    data["modelName"] = event.model_id or ""
+    if event.model_id and control.models.has(event.model_id):
+        data["modelName"] = control.models.get(event.model_id).display_name
+    return data
+
+
 def build_platform_router(services: PlatformServices) -> APIRouter:
     """Build a router bound to an explicit, caller-owned service container."""
     router = APIRouter(prefix="/api/v1/platform", tags=["platform"])
@@ -174,6 +260,8 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
                 "gitWorktrees": False,
                 "agents": True,
                 "models": True,
+                "workflowTimeline": True,
+                "executionDrawer": True,
                 "controlPlaneConfigured": control.configured,
                 "providerMutations": control.allow_provider_mutations,
             }
@@ -337,6 +425,44 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
                 "estimatedCost": sum(record.estimated_cost for record in records),
                 "invocations": len(records),
             },
+        )
+
+    @router.get("/workflows/runs")
+    async def list_workflow_runs(
+        project_id: str | None = Query(default=None, alias="projectId"),
+        task_id: str | None = Query(default=None, alias="taskId"),
+    ) -> dict[str, Any]:
+        control = services.control_plane
+        runs = control.traces.workflow_runs(
+            project_id=project_id,
+            task_id=task_id,
+        )
+        return _response(items=[_workflow_run_view(control, run) for run in runs])
+
+    @router.get("/workflows/runs/{run_id}")
+    async def get_workflow_run(run_id: str) -> dict[str, Any]:
+        control = services.control_plane
+        events = control.traces.workflow_events(run_id=run_id)
+        if not events:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workflow run not found",
+            )
+        run = control.traces.workflow_runs()
+        selected = next(item for item in run if item.run_id == run_id)
+        return _response(run=_workflow_run_view(control, selected))
+
+    @router.get("/workflows/runs/{run_id}/events")
+    async def list_workflow_events(run_id: str) -> dict[str, Any]:
+        control = services.control_plane
+        events = control.traces.workflow_events(run_id=run_id)
+        if not events:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workflow run not found",
+            )
+        return _response(
+            items=[_workflow_event_view(control, event) for event in events]
         )
 
     @router.get("/projects")

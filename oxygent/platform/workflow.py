@@ -22,7 +22,12 @@ from .artifacts import (
     ValidationStatus,
 )
 from .profiles import AgentProfile
-from .tracing import ExecutionTrace
+from .tracing import (
+    EngineeringStatus,
+    ExecutionTrace,
+    WorkflowEvent,
+    WorkflowPhase,
+)
 
 
 class BasicRoleWorkflow(BaseFlow):
@@ -34,6 +39,18 @@ class BasicRoleWorkflow(BaseFlow):
         "technical_lead",
         "reviewer",
     )
+    ROLE_PHASES: ClassVar[dict[str, WorkflowPhase]] = {
+        "product_manager": WorkflowPhase.REQUIREMENT,
+        "solution_architect": WorkflowPhase.ARCHITECTURE,
+        "technical_lead": WorkflowPhase.PLAN,
+        "reviewer": WorkflowPhase.REVIEW,
+    }
+    ACTIVE_STATUSES: ClassVar[dict[str, EngineeringStatus]] = {
+        "product_manager": EngineeringStatus.ANALYZING,
+        "solution_architect": EngineeringStatus.PLANNING,
+        "technical_lead": EngineeringStatus.PLANNING,
+        "reviewer": EngineeringStatus.REVIEWING,
+    }
 
     agent_profiles: dict[str, AgentProfile]
     artifact_store: Any = Field(exclude=True, repr=False)
@@ -83,6 +100,11 @@ class BasicRoleWorkflow(BaseFlow):
             "producerProviderId": producer_provider_id,
         }
 
+    def _append_workflow_event(self, event: WorkflowEvent) -> None:
+        append = getattr(self.trace_store, "append_workflow_event", None)
+        if append is not None:
+            append(event)
+
     async def _call_role(
         self,
         oxy_request: OxyRequest,
@@ -95,6 +117,7 @@ class BasicRoleWorkflow(BaseFlow):
         producer_provider_id: str | None = None,
     ) -> OxyResponse:
         profile = self.agent_profiles[role_id]
+        phase = self.ROLE_PHASES[role_id]
         self.trace_store.append_event(
             ExecutionTrace(
                 id=generate_uuid(),
@@ -107,22 +130,69 @@ class BasicRoleWorkflow(BaseFlow):
                 status="started",
             )
         )
-        response = await oxy_request.call(
-            callee=profile.agent_name,
-            arguments={
-                "query": query,
-                "llm_params": {
-                    "_routing_context": self._routing_context(
-                        profile,
-                        project_id=project_id,
-                        task_id=task_id,
-                        run_id=run_id,
-                        task_type=role_id,
-                        producer_provider_id=producer_provider_id,
-                    )
+        self._append_workflow_event(
+            WorkflowEvent(
+                eventId=generate_uuid(),
+                projectId=project_id,
+                taskId=task_id,
+                runId=run_id,
+                agentId=profile.id,
+                role=role_id,
+                phase=phase,
+                eventType="phase.started",
+                payload={
+                    "status": self.ACTIVE_STATUSES[role_id].value,
+                    "summary": f"{profile.name} started the {phase.value} phase.",
                 },
-            },
+            )
         )
+        try:
+            response = await oxy_request.call(
+                callee=profile.agent_name,
+                arguments={
+                    "query": query,
+                    "llm_params": {
+                        "_routing_context": self._routing_context(
+                            profile,
+                            project_id=project_id,
+                            task_id=task_id,
+                            run_id=run_id,
+                            task_type=role_id,
+                            producer_provider_id=producer_provider_id,
+                        )
+                    },
+                },
+            )
+        except Exception:
+            self.trace_store.append_event(
+                ExecutionTrace(
+                    id=generate_uuid(),
+                    project_id=project_id,
+                    task_id=task_id,
+                    run_id=run_id,
+                    role_id=role_id,
+                    agent_id=profile.id,
+                    event_type="role_task",
+                    status="failed",
+                )
+            )
+            self._append_workflow_event(
+                WorkflowEvent(
+                    eventId=generate_uuid(),
+                    projectId=project_id,
+                    taskId=task_id,
+                    runId=run_id,
+                    agentId=profile.id,
+                    role=role_id,
+                    phase=phase,
+                    eventType="phase.failed",
+                    payload={
+                        "status": EngineeringStatus.FAILED.value,
+                        "summary": f"{profile.name} failed the {phase.value} phase.",
+                    },
+                )
+            )
+            raise
         status = "succeeded" if response.state is OxyState.COMPLETED else "failed"
         self.trace_store.append_event(
             ExecutionTrace(
@@ -138,6 +208,30 @@ class BasicRoleWorkflow(BaseFlow):
                 model_id=response.extra.get("model_id"),
             )
         )
+        self._append_workflow_event(
+            WorkflowEvent(
+                eventId=generate_uuid(),
+                projectId=project_id,
+                taskId=task_id,
+                runId=run_id,
+                agentId=profile.id,
+                role=role_id,
+                providerId=response.extra.get("provider_id"),
+                modelId=response.extra.get("model_id"),
+                phase=phase,
+                eventType="phase.completed"
+                if response.state is OxyState.COMPLETED
+                else "phase.failed",
+                payload={
+                    "status": EngineeringStatus.COMPLETED.value
+                    if response.state is OxyState.COMPLETED
+                    else EngineeringStatus.FAILED.value,
+                    "summary": f"{profile.name} completed the {phase.value} phase."
+                    if response.state is OxyState.COMPLETED
+                    else f"{profile.name} failed the {phase.value} phase.",
+                },
+            )
+        )
         if response.state is not OxyState.COMPLETED:
             raise RuntimeError(f"role task failed: {role_id}")
         return response
@@ -151,6 +245,33 @@ class BasicRoleWorkflow(BaseFlow):
                 "routed model response is missing provider/model metadata"
             )
         return str(provider_id), str(model_id)
+
+    def _record_artifact_event(self, artifact: Any, run_id: str) -> None:
+        phase = self.ROLE_PHASES[artifact.producer_role]
+        self._append_workflow_event(
+            WorkflowEvent(
+                eventId=generate_uuid(),
+                projectId=artifact.project_id,
+                taskId=artifact.task_id,
+                runId=run_id,
+                agentId=artifact.producer_agent,
+                role=artifact.producer_role,
+                providerId=artifact.provider_id,
+                modelId=artifact.model_id,
+                phase=phase,
+                eventType="artifact.created",
+                payload={
+                    "status": EngineeringStatus.COMPLETED.value,
+                    "summary": f"{artifact.type.value} created.",
+                    "artifact": {
+                        "id": artifact.id,
+                        "type": artifact.type.value,
+                        "schemaVersion": artifact.schema_version,
+                        "validationStatus": artifact.validation_status.value,
+                    },
+                },
+            )
+        )
 
     async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:
         idea = oxy_request.get_query()
@@ -181,6 +302,7 @@ class BasicRoleWorkflow(BaseFlow):
                 validation_status=ValidationStatus.VALID,
             )
         )
+        self._record_artifact_event(requirement, run_id)
 
         architect_task_id = generate_uuid()
         architect = await self._call_role(
@@ -207,6 +329,7 @@ class BasicRoleWorkflow(BaseFlow):
                 validation_status=ValidationStatus.VALID,
             )
         )
+        self._record_artifact_event(architecture, run_id)
 
         lead_task_id = generate_uuid()
         lead = await self._call_role(
@@ -233,6 +356,7 @@ class BasicRoleWorkflow(BaseFlow):
                 validation_status=ValidationStatus.VALID,
             )
         )
+        self._record_artifact_event(task_graph, run_id)
 
         review_task_id = generate_uuid()
         reviewer = await self._call_role(
@@ -259,6 +383,7 @@ class BasicRoleWorkflow(BaseFlow):
                 validation_status=ValidationStatus.VALID,
             )
         )
+        self._record_artifact_event(review, run_id)
 
         artifacts = [requirement, architecture, task_graph, review]
         return OxyResponse(

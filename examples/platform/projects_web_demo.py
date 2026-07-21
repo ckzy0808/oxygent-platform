@@ -2,11 +2,13 @@
 
 import asyncio
 import os
+from datetime import datetime, timedelta, timezone
 
 from oxygent import MAS, oxy
 from oxygent.platform import (
     AgentProfile,
     AgentProfileRegistry,
+    EngineeringStatus,
     HealthResult,
     HealthStatus,
     InMemoryExecutionTraceStore,
@@ -31,6 +33,8 @@ from oxygent.platform import (
     RouteDecisionTrace,
     ToolPolicy,
     ToolPolicyRegistry,
+    WorkflowEvent,
+    WorkflowPhase,
     build_platform_router,
     default_role_definitions,
 )
@@ -45,6 +49,177 @@ class DemoHealthAdapter:
 
     async def health_check(self, _provider, _model):
         return HealthResult(status=HealthStatus.HEALTHY, latencyMs=18.0)
+
+
+def seed_workflow_timeline(
+    traces: InMemoryExecutionTraceStore, project_id: str
+) -> None:
+    """Seed a product-safe timeline; no model prompts or raw output are stored."""
+    started_at = datetime.now(timezone.utc) - timedelta(minutes=28)
+    run_id = "workflow-run-001"
+    task_id = "workflow-timeline-task"
+    phases = [
+        (
+            WorkflowPhase.REQUIREMENT,
+            "product_manager",
+            "product_manager-profile",
+            "provider-a",
+            "pm-model",
+            EngineeringStatus.ANALYZING,
+            "Requirements and acceptance criteria are ready.",
+            ["artifact-read", "artifact-write"],
+            {"id": "requirement-spec-001", "type": "RequirementSpec"},
+            0.008,
+            1240,
+        ),
+        (
+            WorkflowPhase.ARCHITECTURE,
+            "solution_architect",
+            "solution_architect-profile",
+            "provider-b",
+            "architect-model",
+            EngineeringStatus.PLANNING,
+            "Architecture boundaries and decisions are documented.",
+            ["artifact-read", "dependency-map"],
+            {"id": "architecture-decision-001", "type": "ArchitectureDecision"},
+            0.012,
+            1680,
+        ),
+        (
+            WorkflowPhase.PLAN,
+            "technical_lead",
+            "technical_lead-profile",
+            "provider-c",
+            "lead-model",
+            EngineeringStatus.PLANNING,
+            "The implementation task graph and dependencies are ready.",
+            ["artifact-read", "task-graph"],
+            {"id": "task-graph-001", "type": "TaskGraph"},
+            0.016,
+            1420,
+        ),
+        (
+            WorkflowPhase.IMPLEMENTATION,
+            "technical_lead",
+            "technical_lead-profile",
+            "provider-c",
+            "lead-model",
+            EngineeringStatus.IMPLEMENTING,
+            "Implementation scope was evaluated; code writing remains gated.",
+            ["repository-read", "file-search"],
+            None,
+            0.014,
+            2040,
+        ),
+        (
+            WorkflowPhase.VERIFICATION,
+            "reviewer",
+            "reviewer-profile",
+            "provider-d",
+            "reviewer-model",
+            EngineeringStatus.TESTING,
+            "Configured checks completed with recorded exit codes.",
+            ["verification-profile"],
+            None,
+            0.010,
+            1860,
+        ),
+        (
+            WorkflowPhase.REVIEW,
+            "reviewer",
+            "reviewer-profile",
+            "provider-d",
+            "reviewer-model",
+            EngineeringStatus.REVIEWING,
+            "Independent review completed without exposing private reasoning.",
+            ["artifact-read"],
+            {"id": "review-report-001", "type": "ReviewReport"},
+            0.020,
+            1540,
+        ),
+    ]
+    for index, (
+        phase,
+        role,
+        agent_id,
+        provider_id,
+        model_id,
+        active_status,
+        summary,
+        tools,
+        artifact,
+        cost,
+        duration_ms,
+    ) in enumerate(phases):
+        phase_started = started_at + timedelta(minutes=index * 4)
+        start_payload = {
+            "status": active_status.value,
+            "summary": f"{phase.value.title()} phase started.",
+        }
+        if index == 0:
+            start_payload["runName"] = "Platform workspace delivery"
+        traces.append_workflow_event(
+            WorkflowEvent(
+                eventId=f"workflow-{index}-started",
+                projectId=project_id,
+                taskId=task_id,
+                runId=run_id,
+                agentId=agent_id,
+                role=role,
+                providerId=provider_id,
+                modelId=model_id,
+                phase=phase,
+                eventType="phase.started",
+                timestamp=phase_started,
+                payload=start_payload,
+            )
+        )
+        completed_payload = {
+            "status": EngineeringStatus.COMPLETED.value,
+            "summary": summary,
+            "toolsUsed": tools,
+            "cost": cost,
+            "durationMs": duration_ms,
+        }
+        if artifact:
+            completed_payload["artifact"] = {
+                **artifact,
+                "schemaVersion": "1.0",
+                "validationStatus": "valid",
+            }
+        traces.append_workflow_event(
+            WorkflowEvent(
+                eventId=f"workflow-{index}-completed",
+                projectId=project_id,
+                taskId=task_id,
+                runId=run_id,
+                agentId=agent_id,
+                role=role,
+                providerId=provider_id,
+                modelId=model_id,
+                phase=phase,
+                eventType="phase.completed",
+                timestamp=phase_started + timedelta(minutes=3),
+                payload=completed_payload,
+            )
+        )
+    traces.append_workflow_event(
+        WorkflowEvent(
+            eventId="workflow-approval-requested",
+            projectId=project_id,
+            taskId=task_id,
+            runId=run_id,
+            agentId="human-approval",
+            role="approver",
+            phase=WorkflowPhase.APPROVAL,
+            eventType="approval.requested",
+            timestamp=started_at + timedelta(minutes=27),
+            payload={
+                "status": EngineeringStatus.AWAITING_APPROVAL.value,
+                "summary": "Workflow is ready for explicit human approval.",
+            },
+        )
+    )
 
 
 def build_control_plane(project_id: str) -> PlatformControlPlane:
@@ -238,6 +413,7 @@ def build_control_plane(project_id: str) -> PlatformControlPlane:
                 requiredCapabilities=["structured-output", "text"],
             )
         )
+    seed_workflow_timeline(traces, project_id)
     adapters = ProviderAdapterRegistry()
     demo_adapter = DemoHealthAdapter()
     for provider_type in {

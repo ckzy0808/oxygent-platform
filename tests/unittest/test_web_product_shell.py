@@ -138,6 +138,29 @@ def test_agents_and_models_use_sanitized_control_plane_views():
     assert "testProvider" in client
 
 
+def test_workflow_timeline_uses_unified_events_and_hides_private_reasoning():
+    document = read_web_file("workflows.html")
+    script = read_web_file("js/workflow-page.js")
+    client = read_web_file("js/api-client.js")
+
+    assert "./js/workflow-page.js" in document
+    assert "./css/workflow-timeline.css" in document
+    for phase in (
+        "Requirement",
+        "Architecture",
+        "Plan",
+        "Implementation",
+        "Verification",
+        "Review",
+        "Approval",
+    ):
+        assert phase in script
+    assert "Execution details" in script
+    assert "Private model reasoning is never displayed" in script
+    assert "listWorkflowRuns" in client
+    assert "listWorkflowEvents" in client
+
+
 @pytest.mark.asyncio
 async def test_all_product_pages_are_served_by_existing_static_mount():
     app = FastAPI()

@@ -62,6 +62,19 @@
         },
         listModels: function () { return request('/models'); },
         listRoutingPolicies: function () { return request('/routing-policies'); },
-        listUsage: function () { return request('/usage'); }
+        listUsage: function () { return request('/usage'); },
+        listWorkflowRuns: function (filters) {
+            var params = new URLSearchParams();
+            filters = filters || {};
+            if (filters.projectId) params.set('projectId', filters.projectId);
+            if (filters.taskId) params.set('taskId', filters.taskId);
+            return request('/workflows/runs' + (params.toString() ? '?' + params.toString() : ''));
+        },
+        getWorkflowRun: function (runId) {
+            return request('/workflows/runs/' + encodeURIComponent(runId));
+        },
+        listWorkflowEvents: function (runId) {
+            return request('/workflows/runs/' + encodeURIComponent(runId) + '/events');
+        }
     };
 })();
