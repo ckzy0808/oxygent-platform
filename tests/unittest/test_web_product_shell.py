@@ -180,6 +180,12 @@ def test_code_workspace_uses_isolated_repository_apis_and_scope_contract():
     assert "listRepositorySources" in client
     assert "createCodeTask" in client
     assert "readRepositoryFile" in client
+    assert "getCodeTaskDiff" in client
+    assert "runVerification" in client
+    for tab in ("Summary", "Changes", "Diff", "Verification", "Review", "Artifacts"):
+        assert tab in script
+    assert "escapeHtml(diff.diff)" in script
+    assert "Real commands, exit codes, and output" in script
     assert "Every Code Task runs in an isolated Git worktree" in read_web_file(
         "index.html"
     )

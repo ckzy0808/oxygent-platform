@@ -2,7 +2,7 @@
     'use strict';
 
     var api;
-    var state = {projects: [], sources: [], repositories: [], tasks: [], project: null, task: null};
+    var state = {projects: [], sources: [], repositories: [], tasks: [], project: null, task: null, diff: null, profiles: [], runs: []};
     var phases = ['Requirement', 'Architecture', 'Plan', 'Implementation', 'Verification', 'Review', 'Approval'];
 
     function escapeHtml(value) {
@@ -82,13 +82,84 @@
             '<div class="code-tree-header"><b>Relevant files</b><span id="tree-count">—</span></div><div class="code-file-list" id="repository-tree"><span class="code-loading">Reading worktree…</span></div></aside>' +
             '<main class="code-pane timeline-pane"><div class="code-pane-title"><div><span>Task Timeline</span><b>' + escapeHtml(contract.objective) + '</b></div><span class="code-status ready">' + escapeHtml(task.status) + '</span></div>' +
             '<ol class="code-phase-list">' + stages + '</ol><div class="code-safety-card"><b>Mutation remains gated</b><p>PR5 exposes repository read, tree, search, metadata, and isolated worktree creation. It does not expose an Agent file-write API.</p></div></main>' +
-            '<aside class="code-pane contract-pane"><div class="code-pane-title"><div><span>Change Contract</span><b>Enforced by Scope Guard</b></div><span class="code-risk ' + escapeHtml(contract.risk) + '">' + escapeHtml(contract.risk) + ' risk</span></div>' +
+            '<aside class="code-pane contract-pane"><nav class="code-result-tabs" aria-label="Changes and Verification">' +
+            ['Summary', 'Changes', 'Diff', 'Verification', 'Review', 'Artifacts'].map(function (label, index) { return '<button data-code-tab="' + label.toLowerCase() + '" class="' + (index === 0 ? 'active' : '') + '">' + label + '</button>'; }).join('') +
+            '</nav><div id="code-tab-content"></div><section class="file-preview" id="file-preview" hidden><div><b id="preview-path"></b><button id="close-preview">×</button></div><pre id="preview-content"></pre></section></aside>';
+        document.getElementById('repository-search').addEventListener('submit', searchRepository);
+        document.querySelectorAll('[data-code-tab]').forEach(function (button) {
+            button.addEventListener('click', function () { renderResultTab(button.getAttribute('data-code-tab')); });
+        });
+        renderResultTab('summary');
+    }
+
+    function summaryTab() {
+        var contract = state.task.changeContract;
+        return '<div class="code-pane-title"><div><span>Change Contract</span><b>Enforced by Scope Guard</b></div><span class="code-risk ' + escapeHtml(contract.risk) + '">' + escapeHtml(contract.risk) + ' risk</span></div>' +
             '<section class="contract-section"><h3>Objective</h3><p>' + escapeHtml(contract.objective) + '</p></section>' +
             '<section class="contract-section"><h3>Acceptance criteria</h3><ul>' + contract.acceptanceCriteria.map(function (item) { return '<li>' + escapeHtml(item) + '</li>'; }).join('') + '</ul></section>' +
             '<section class="contract-section"><h3>Allowed paths</h3><div class="code-tags">' + contract.allowedPaths.map(function (item) { return '<code>' + escapeHtml(item) + '</code>'; }).join('') + '</div></section>' +
-            '<section class="contract-section"><h3>Hard limits</h3><dl class="contract-limits"><div><dt>Files</dt><dd>' + contract.maxChangedFiles + '</dd></div><div><dt>Diff lines</dt><dd>' + contract.maxDiffLines + '</dd></div><div><dt>Dependencies</dt><dd>' + (contract.dependencyChangesAllowed ? 'Allowed' : 'Blocked') + '</dd></div></dl></section>' +
-            '<section class="file-preview" id="file-preview" hidden><div><b id="preview-path"></b><button id="close-preview">×</button></div><pre id="preview-content"></pre></section></aside>';
-        document.getElementById('repository-search').addEventListener('submit', searchRepository);
+            '<section class="contract-section"><h3>Hard limits</h3><dl class="contract-limits"><div><dt>Files</dt><dd>' + contract.maxChangedFiles + '</dd></div><div><dt>Diff lines</dt><dd>' + contract.maxDiffLines + '</dd></div><div><dt>Dependencies</dt><dd>' + (contract.dependencyChangesAllowed ? 'Allowed' : 'Blocked') + '</dd></div></dl></section>';
+    }
+
+    function changesTab() {
+        var diff = state.diff;
+        if (!diff) return '<div class="code-tab-empty">Diff metadata is loading…</div>';
+        var files = diff.changedFiles || [];
+        return '<div class="code-pane-title"><div><span>Changed files</span><b>' + files.length + ' files · +' + diff.additions + ' / −' + diff.deletions + '</b></div><span class="code-scope-state ' + (diff.scopeStatus === 'valid' ? 'valid' : 'blocked') + '">' + escapeHtml(diff.scopeStatus) + '</span></div>' +
+            (files.length ? '<div class="changed-file-list">' + files.map(function (path) { return '<div><code>' + escapeHtml(path) + '</code><span>Modified in worktree</span></div>'; }).join('') + '</div>' : '<div class="code-tab-empty">No changes relative to the recorded base commit.</div>');
+    }
+
+    function diffTab() {
+        var diff = state.diff;
+        if (!diff) return '<div class="code-tab-empty">Unified diff is loading…</div>';
+        if (diff.scopeStatus !== 'valid') return '<div class="verification-blocked"><b>Diff blocked by Scope Guard</b><p>' + escapeHtml(diff.scopeStatus.replace(/^blocked:\s*/, '')) + '</p><small>Diff content is withheld when the Change Contract fails.</small></div>';
+        return '<div class="code-pane-title"><div><span>Unified diff</span><b>' + diff.diffLineCount + ' changed lines</b></div>' + (diff.truncated ? '<span class="code-scope-state blocked">Truncated</span>' : '<span class="code-scope-state valid">Complete</span>') + '</div>' +
+            (diff.diff ? '<pre class="unified-diff">' + escapeHtml(diff.diff) + '</pre>' : '<div class="code-tab-empty">No diff to display.</div>');
+    }
+
+    function verificationTab() {
+        var commands = [];
+        state.profiles.forEach(function (profile) {
+            profile.commands.forEach(function (command) { commands.push({profile: profile, command: command}); });
+        });
+        var commandCards = commands.length ? commands.map(function (item) {
+            return '<article class="verification-command"><div><span>' + escapeHtml(item.command.slot) + '</span><b>' + escapeHtml(item.command.name) + '</b><code>' + escapeHtml(item.command.argv.join(' ')) + '</code></div>' +
+                '<button class="og-secondary-button" data-run-profile="' + escapeHtml(item.profile.id) + '" data-run-command="' + escapeHtml(item.command.id) + '">Run</button></article>';
+        }).join('') : '<div class="code-tab-empty">No Verification Profile is configured for this Project.</div>';
+        var runs = state.runs.length ? '<div class="verification-runs"><h3>Recorded results</h3>' + state.runs.map(function (run) {
+            return '<article class="verification-run ' + escapeHtml(run.status) + '"><div><span>' + escapeHtml(run.status) + '</span><b>' + escapeHtml(run.commandName) + '</b></div><dl><div><dt>Exit</dt><dd>' + (run.exitCode == null ? '—' : run.exitCode) + '</dd></div><div><dt>Duration</dt><dd>' + Math.round(run.durationMs) + ' ms</dd></div></dl>' +
+                '<code>' + escapeHtml(run.argv.join(' ')) + '</code>' + (run.stdoutPreview ? '<pre>' + escapeHtml(run.stdoutPreview) + '</pre>' : '') + '</article>';
+        }).join('') + '</div>' : '';
+        return '<div class="code-pane-title"><div><span>Verification</span><b>Real commands, exit codes, and output</b></div><span class="code-scope-state valid">Fixed argv</span></div>' + commandCards + runs;
+    }
+
+    function renderResultTab(tab) {
+        if (!state.task) return;
+        document.querySelectorAll('[data-code-tab]').forEach(function (button) { button.classList.toggle('active', button.getAttribute('data-code-tab') === tab); });
+        var target = document.getElementById('code-tab-content');
+        if (tab === 'summary') target.innerHTML = summaryTab();
+        else if (tab === 'changes') target.innerHTML = changesTab();
+        else if (tab === 'diff') target.innerHTML = diffTab();
+        else if (tab === 'verification') target.innerHTML = verificationTab();
+        else if (tab === 'review') target.innerHTML = '<div class="code-tab-empty"><b>Review starts after verification.</b><span>No model reasoning or fabricated test status is shown here.</span></div>';
+        else target.innerHTML = '<div class="code-tab-empty"><b>Task Artifacts</b><span>Verification output uses immutable output references. Workflow Artifacts remain available in Projects.</span></div>';
+        target.querySelectorAll('[data-run-command]').forEach(function (button) {
+            button.addEventListener('click', function () { runVerification(button); });
+        });
+    }
+
+    async function runVerification(button) {
+        button.disabled = true;
+        button.textContent = 'Running…';
+        try {
+            await api.runVerification(state.project.id, state.task.id, button.getAttribute('data-run-profile'), button.getAttribute('data-run-command'));
+            state.runs = (await api.listVerificationRuns(state.project.id, state.task.id)).items || [];
+            renderResultTab('verification');
+        } catch (error) {
+            setMessage(error.message, 'error');
+            button.disabled = false;
+            button.textContent = 'Run';
+        }
     }
 
     async function loadTask(taskId) {
@@ -100,11 +171,18 @@
             document.getElementById('repository-name').textContent = repository ? repository.name : 'Repository';
             var responses = await Promise.all([
                 api.getRepositoryMetadata(state.project.id, state.task.id),
-                api.getRepositoryTree(state.project.id, state.task.id, '.')
+                api.getRepositoryTree(state.project.id, state.task.id, '.'),
+                api.getCodeTaskDiff(state.project.id, state.task.id),
+                api.listVerificationProfiles(state.project.id),
+                api.listVerificationRuns(state.project.id, state.task.id)
             ]);
             var metadata = responses[0].result.data;
+            state.diff = responses[2].diff;
+            state.profiles = responses[3].items || [];
+            state.runs = responses[4].items || [];
             document.querySelector('#repository-metadata [data-clean]');
             renderFiles(responses[1].result.data.files || []);
+            renderResultTab(state.runs.length ? 'verification' : 'summary');
             if (!metadata.clean) setMessage('The isolated worktree contains local changes. The source workspace remains untouched.', 'warning');
         } catch (error) {
             setMessage(error.message, 'error');

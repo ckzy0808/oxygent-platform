@@ -79,6 +79,42 @@
 .file-preview > div { display: flex; justify-content: space-between; gap: 10px; }
 .file-preview button { border: 0; background: none; font-size: 20px; }
 .file-preview pre { max-height: calc(100vh - 270px); overflow: auto; white-space: pre-wrap; font: 10px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.code-result-tabs { display: flex; gap: 3px; margin: -4px -3px 14px; overflow-x: auto; padding: 3px; border-bottom: 1px solid #eaecf0; }
+.code-result-tabs button { flex: 0 0 auto; padding: 6px 7px; border: 0; border-radius: 5px; background: transparent; color: #667085; font-size: 10px; font-weight: 700; cursor: pointer; }
+.code-result-tabs button.active { background: #eff4ff; color: #1849a9; }
+.code-scope-state { max-width: 180px; overflow: hidden; padding: 4px 7px; border-radius: 999px; font-size: 9px !important; font-weight: 800; text-overflow: ellipsis; text-transform: uppercase !important; white-space: nowrap; }
+.code-scope-state.valid { color: #027a48; background: #ecfdf3; }
+.code-scope-state.blocked { color: #b42318; background: #fef3f2; }
+.changed-file-list { display: grid; gap: 5px; }
+.changed-file-list div { display: grid; gap: 3px; padding: 9px; border: 1px solid #eaecf0; border-radius: 7px; }
+.changed-file-list code { overflow: hidden; color: #344054; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.changed-file-list span { color: #98a2b3; font-size: 9px; }
+.unified-diff { max-height: calc(100vh - 285px); margin: 0; overflow: auto; padding: 12px; border: 1px solid #1d2939; border-radius: 8px; background: #101828; color: #d0d5dd; white-space: pre; font: 9px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.code-tab-empty { display: grid; place-items: center; gap: 7px; min-height: 260px; padding: 30px; color: #98a2b3; font-size: 11px; text-align: center; }
+.code-tab-empty b { color: #475467; font-size: 12px; }
+.verification-blocked { padding: 16px; border: 1px solid #fecdca; border-radius: 8px; background: #fef3f2; }
+.verification-blocked b { color: #b42318; font-size: 12px; }
+.verification-blocked p { color: #912018; font-size: 11px; }
+.verification-blocked small { color: #b54708; }
+.verification-command { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; padding: 10px; border: 1px solid #eaecf0; border-radius: 8px; }
+.verification-command div { min-width: 0; }
+.verification-command span { display: block; color: #155eef; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.verification-command b { display: block; margin: 2px 0 4px; color: #344054; font-size: 11px; }
+.verification-command code, .verification-run > code { display: block; overflow: hidden; color: #667085; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.verification-runs { margin-top: 16px; }
+.verification-runs h3 { color: #667085; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.verification-run { margin-bottom: 7px; padding: 10px; border-left: 3px solid #98a2b3; border-radius: 6px; background: #f9fafb; }
+.verification-run.passed { border-color: #12b76a; background: #f6fef9; }
+.verification-run.failed, .verification-run.timedOut { border-color: #f04438; background: #fffbfa; }
+.verification-run.blocked { border-color: #f79009; background: #fffcf5; }
+.verification-run > div { display: flex; justify-content: space-between; }
+.verification-run span { color: #667085; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.verification-run b { color: #344054; font-size: 11px; }
+.verification-run dl { display: flex; gap: 12px; margin: 7px 0; }
+.verification-run dl div { display: flex; gap: 4px; }
+.verification-run dt { color: #98a2b3; font-size: 9px; }
+.verification-run dd { margin: 0; color: #475467; font-size: 9px; font-weight: 700; }
+.verification-run pre { max-height: 120px; overflow: auto; margin: 8px 0 0; padding: 8px; background: #101828; color: #d0d5dd; font: 9px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
 .code-empty { grid-column: 1 / -1; align-self: center; justify-self: center; max-width: 680px; padding: 70px 30px; text-align: center; }
 .code-empty-icon { display: grid; place-items: center; width: 50px; height: 50px; margin: 0 auto 14px; border-radius: 13px; background: #eff4ff; color: #155eef; font-size: 22px; }
 .code-empty h2 { margin: 0 0 8px; font-size: 18px; }

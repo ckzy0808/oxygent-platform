@@ -17,7 +17,7 @@ from .artifacts import (
     TaskNode,
     ValidationStatus,
 )
-from .api import ArtifactRevisionRequest, build_platform_router
+from .api import ArtifactRevisionRequest, VerificationRunRequest, build_platform_router
 from .credentials import (
     CredentialResolver,
     EnvironmentCredentialResolver,
@@ -120,6 +120,20 @@ from .tracing import (
     project_workflow_run,
 )
 from .usage import InMemoryModelUsageStore, InvocationStatus, ModelUsage
+from .verification import (
+    DiffSnapshot,
+    InMemoryVerificationProfileStore,
+    InMemoryVerificationRunStore,
+    VerificationCommand,
+    VerificationOutput,
+    VerificationProfile,
+    VerificationProfileCreate,
+    VerificationRun,
+    VerificationRunner,
+    VerificationSlot,
+    VerificationStatus,
+    capture_diff,
+)
 from .workflow import BasicRoleWorkflow
 
 __all__ = [
@@ -142,6 +156,7 @@ __all__ = [
     "CodingRunRequest",
     "CodingRunResult",
     "CredentialResolver",
+    "DiffSnapshot",
     "EnvironmentCredentialResolver",
     "EngineeringStatus",
     "ExecutionTrace",
@@ -156,6 +171,8 @@ __all__ = [
     "InMemoryProjectRepository",
     "InMemoryProjectTaskRepository",
     "InMemoryRepositoryProfileStore",
+    "InMemoryVerificationProfileStore",
+    "InMemoryVerificationRunStore",
     "InvocationStatus",
     "MappingCredentialResolver",
     "LocalEsProjectRepository",
@@ -214,6 +231,15 @@ __all__ = [
     "ToolPolicy",
     "ToolPolicyRegistry",
     "ValidationStatus",
+    "VerificationCommand",
+    "VerificationOutput",
+    "VerificationProfile",
+    "VerificationProfileCreate",
+    "VerificationRun",
+    "VerificationRunRequest",
+    "VerificationRunner",
+    "VerificationSlot",
+    "VerificationStatus",
     "WorkflowEvent",
     "WorkflowPhase",
     "WorkflowRunProjection",
@@ -225,6 +251,7 @@ __all__ = [
     "ProviderHealthCheckRequest",
     "ProviderUpdate",
     "build_platform_router",
+    "capture_diff",
     "default_provider_adapters",
     "default_role_definitions",
     "project_workflow_run",

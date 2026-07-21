@@ -111,6 +111,28 @@
         },
         readRepositoryFile: function (projectId, taskId, path) {
             return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/repository/file?path=' + encodeURIComponent(path));
+        },
+        getCodeTaskDiff: function (projectId, taskId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/diff');
+        },
+        listVerificationProfiles: function (projectId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/verification-profiles');
+        },
+        createVerificationProfile: function (projectId, profile) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/verification-profiles', {
+                method: 'POST', body: JSON.stringify(profile)
+            });
+        },
+        listVerificationRuns: function (projectId, taskId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/verification-runs');
+        },
+        runVerification: function (projectId, taskId, profileId, commandId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/verification-runs', {
+                method: 'POST', body: JSON.stringify({profileId: profileId, commandId: commandId})
+            });
+        },
+        getVerificationOutput: function (projectId, taskId, outputId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/verification-outputs/' + encodeURIComponent(outputId));
         }
     };
 })();

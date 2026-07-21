@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -37,6 +38,9 @@ from oxygent.platform import (
     RouteDecisionTrace,
     ToolPolicy,
     ToolPolicyRegistry,
+    VerificationCommand,
+    VerificationProfileCreate,
+    VerificationSlot,
     WorkflowEvent,
     WorkflowPhase,
     build_platform_router,
@@ -448,6 +452,7 @@ async def build_services() -> PlatformServices:
             workspace_root=Path(
                 os.getenv("OXYGENT_CODE_WORKSPACE_ROOT", "/tmp/oxygent-code-worktrees")
             ),
+            verification_executables={sys.executable, "python", "python3"},
         )
         if demo_repository
         else PlatformServices()
@@ -508,7 +513,31 @@ async def build_services() -> PlatformServices:
                 allowedBaseBranches=[default_branch],
             ),
         )
-        await services.create_code_task(
+        verification_profile = await services.register_verification_profile(
+            project.id,
+            VerificationProfileCreate(
+                repositoryId=repository.id,
+                name="Safe local checks",
+                commands=[
+                    VerificationCommand(
+                        id="demo-unit-check",
+                        name="Repository smoke test",
+                        slot=VerificationSlot.UNIT,
+                        argv=[
+                            sys.executable,
+                            "-c",
+                            (
+                                "from pathlib import Path; "
+                                "assert Path('README.md').is_file(); "
+                                "print('Repository smoke test passed')"
+                            ),
+                        ],
+                        timeoutSeconds=30,
+                    )
+                ],
+            ),
+        )
+        code_task = await services.create_code_task(
             project.id,
             CodeTaskCreate(
                 repositoryId=repository.id,
@@ -525,9 +554,23 @@ async def build_services() -> PlatformServices:
                     forbiddenPaths=[".env*", "**/*.key", "**/*.pem"],
                     maxChangedFiles=20,
                     maxDiffLines=1000,
+                    verificationProfileId=verification_profile.id,
                 ),
             ),
         )
+        if os.getenv("OXYGENT_DEMO_SEED_DIFF") == "1":
+            demo_change = Path(code_task.worktree_path) / "docs/refactor/demo-change.md"
+            demo_change.parent.mkdir(parents=True, exist_ok=True)
+            demo_change.write_text(
+                "# Demo change\n\nThis file exists only in the disposable demo worktree.\n",
+                encoding="utf-8",
+            )
+            await services.run_verification(
+                project.id,
+                code_task.id,
+                verification_profile.id,
+                "demo-unit-check",
+            )
     services.control_plane = build_control_plane(project.id)
     return services
 

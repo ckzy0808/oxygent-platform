@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -43,6 +44,17 @@ from .projects import (
     ProjectTaskRepository,
     ProjectUpdate,
 )
+from .verification import (
+    DiffSnapshot,
+    InMemoryVerificationProfileStore,
+    InMemoryVerificationRunStore,
+    VerificationProfile,
+    VerificationProfileCreate,
+    VerificationRun,
+    VerificationRunner,
+    VerificationOutput,
+    capture_diff,
+)
 
 
 class ProjectActivity(PlatformModel):
@@ -69,6 +81,13 @@ class PlatformServices:
     coding_engine: CodingEngine = field(default_factory=NativeCodingEngine)
     worktrees: WorktreeManager | None = None
     code_authorization_enabled: bool = False
+    verification_profiles: InMemoryVerificationProfileStore = field(
+        default_factory=InMemoryVerificationProfileStore
+    )
+    verification_runs: InMemoryVerificationRunStore = field(
+        default_factory=InMemoryVerificationRunStore
+    )
+    verification_runner: VerificationRunner = field(default_factory=VerificationRunner)
     _activities: list[ProjectActivity] = field(default_factory=list, init=False)
     _activity_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
 
@@ -79,12 +98,23 @@ class PlatformServices:
         repository_roots: dict[str, Path],
         workspace_root: Path,
         code_authorization_enabled: bool = False,
+        verification_executables: set[str] | None = None,
+        verification_environment: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> PlatformServices:
         """Build services with an explicit repository allow-list and worktree root."""
         return cls(
             worktrees=WorktreeManager(repository_roots, workspace_root),
             code_authorization_enabled=code_authorization_enabled,
+            verification_runner=VerificationRunner(
+                allowed_executables=verification_executables or set(),
+                environment=verification_environment
+                or {
+                    key: value
+                    for key, value in os.environ.items()
+                    if key in {"PATH", "LANG", "LC_ALL"}
+                },
+            ),
             **kwargs,
         )
 
@@ -253,6 +283,112 @@ class PlatformServices:
                 matches.append(item)
             result.data["matches"] = matches
         return result
+
+    async def get_code_diff(self, project_id: str, task_id: str) -> DiffSnapshot:
+        task = await self.code_tasks.get(task_id)
+        if task.project_id != project_id:
+            raise KeyError(f"code task not found: {task_id}")
+        snapshot = await capture_diff(Path(task.worktree_path), task.base_commit)
+        try:
+            ScopeGuard.check_diff(
+                task.change_contract,
+                snapshot.changed_files,
+                snapshot.diff_line_count,
+            )
+        except ScopeViolation as exc:
+            snapshot = snapshot.model_copy(
+                update={"diff": "", "scope_status": f"blocked: {exc}"}
+            )
+        await self.code_tasks.update(
+            task.model_copy(
+                update={
+                    "changed_files": snapshot.changed_files,
+                    "diff_line_count": snapshot.diff_line_count,
+                    "updated_at": utc_now(),
+                }
+            )
+        )
+        return snapshot
+
+    async def register_verification_profile(
+        self, project_id: str, payload: VerificationProfileCreate
+    ) -> VerificationProfile:
+        await self.projects.get(project_id)
+        repository = await self.repositories.get(payload.repository_id)
+        if repository.project_id != project_id:
+            raise ValueError("repository must belong to the target project")
+        profile = VerificationProfile(projectId=project_id, **payload.model_dump())
+        await self.verification_profiles.create(profile)
+        await self._record_activity(
+            project_id,
+            "verificationProfile.created",
+            f"Verification profile created: {profile.name}",
+            profile.id,
+        )
+        return profile
+
+    async def run_verification(
+        self,
+        project_id: str,
+        task_id: str,
+        profile_id: str,
+        command_id: str,
+    ) -> VerificationRun:
+        task = await self.code_tasks.get(task_id)
+        if task.project_id != project_id:
+            raise KeyError(f"code task not found: {task_id}")
+        profile = await self.verification_profiles.get(profile_id)
+        if (
+            profile.project_id != project_id
+            or profile.repository_id != task.repository_id
+        ):
+            raise ValueError("verification profile does not match this Code Task")
+        if (
+            task.change_contract.verification_profile_id
+            and task.change_contract.verification_profile_id != profile.id
+        ):
+            raise ScopeViolation(
+                "verification profile differs from the Change Contract"
+            )
+        try:
+            command = next(item for item in profile.commands if item.id == command_id)
+        except StopIteration as exc:
+            raise KeyError(f"verification command not found: {command_id}") from exc
+        snapshot = await capture_diff(Path(task.worktree_path), task.base_commit)
+        run, outputs = await self.verification_runner.run(
+            project_id=project_id,
+            task_id=task.id,
+            profile_id=profile.id,
+            command=command,
+            worktree=Path(task.worktree_path),
+            contract=task.change_contract,
+            diff=snapshot,
+        )
+        await self.verification_runs.append(run, outputs)
+        await self.code_tasks.update(
+            task.model_copy(
+                update={
+                    "changed_files": snapshot.changed_files,
+                    "diff_line_count": snapshot.diff_line_count,
+                    "updated_at": utc_now(),
+                }
+            )
+        )
+        await self._record_activity(
+            project_id,
+            "verification.completed",
+            f"{command.name}: {run.status.value}",
+            run.id,
+        )
+        return run
+
+    async def get_verification_output(
+        self, project_id: str, task_id: str, output_id: str
+    ) -> VerificationOutput:
+        output = await self.verification_runs.get_output(output_id)
+        if output.project_id != project_id or output.task_id != task_id:
+            raise KeyError(f"verification output not found: {output_id}")
+        return output
 
     async def list_artifacts(
         self, project_id: str, *, latest_only: bool = False

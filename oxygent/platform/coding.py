@@ -376,7 +376,7 @@ async def run_git(
     )
     try:
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
-    except TimeoutError as exc:
+    except asyncio.TimeoutError as exc:
         process.kill()
         await process.communicate()
         raise GitOperationError("Git operation timed out") from exc

@@ -31,6 +31,7 @@ from .projects import ProjectCreate, ProjectTaskFromChat, ProjectUpdate
 from .registries import RegistryError
 from .services import PlatformServices
 from .tracing import EngineeringStatus
+from .verification import VerificationProfileCreate
 
 
 class ArtifactRevisionRequest(PlatformModel):
@@ -40,6 +41,11 @@ class ArtifactRevisionRequest(PlatformModel):
     provider_id: str | None = Field(default=None, max_length=160)
     model_id: str | None = Field(default=None, max_length=160)
     validation_status: ValidationStatus = ValidationStatus.UNVALIDATED
+
+
+class VerificationRunRequest(PlatformModel):
+    profile_id: str = Field(min_length=1, max_length=160)
+    command_id: str = Field(min_length=1, max_length=160)
 
 
 def _dump(value: Any) -> dict[str, Any]:
@@ -296,6 +302,7 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
                 "chatToProjectTask": True,
                 "codeWorkspace": services.code_workspace_configured,
                 "gitWorktrees": services.code_workspace_configured,
+                "diffVerification": services.code_workspace_configured,
                 "agents": True,
                 "models": True,
                 "workflowTimeline": True,
@@ -782,5 +789,104 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
         return await code_read(
             project_id, task_id, request, CodingOperation.READ_FILE, path=path
         )
+
+    @router.get("/projects/{project_id}/code-tasks/{task_id}/diff")
+    async def get_code_task_diff(
+        project_id: str, task_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            snapshot = await services.get_code_diff(project_id, task_id)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except CodeWorkspaceError as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(diff=_dump(snapshot))
+
+    @router.get("/projects/{project_id}/verification-profiles")
+    async def list_verification_profiles(
+        project_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            await services.projects.get(project_id)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        items = await services.verification_profiles.list(project_id)
+        return _response(items=[_dump(item) for item in items])
+
+    @router.post(
+        "/projects/{project_id}/verification-profiles",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def create_verification_profile(
+        project_id: str,
+        payload: VerificationProfileCreate,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            profile = await services.register_verification_profile(project_id, payload)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(profile=_dump(profile))
+
+    @router.get("/projects/{project_id}/code-tasks/{task_id}/verification-runs")
+    async def list_verification_runs(
+        project_id: str, task_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            task = await services.code_tasks.get(task_id)
+            if task.project_id != project_id:
+                raise KeyError(f"code task not found: {task_id}")
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        runs = await services.verification_runs.list(task_id)
+        return _response(items=[_dump(item) for item in runs])
+
+    @router.post(
+        "/projects/{project_id}/code-tasks/{task_id}/verification-runs",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def run_code_task_verification(
+        project_id: str,
+        task_id: str,
+        payload: VerificationRunRequest,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            run = await services.run_verification(
+                project_id,
+                task_id,
+                payload.profile_id,
+                payload.command_id,
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(run=_dump(run))
+
+    @router.get(
+        "/projects/{project_id}/code-tasks/{task_id}/verification-outputs/{output_id}"
+    )
+    async def get_verification_output(
+        project_id: str,
+        task_id: str,
+        output_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            output = await services.get_verification_output(
+                project_id, task_id, output_id
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        return _response(output=_dump(output))
 
     return router
