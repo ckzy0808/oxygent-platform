@@ -2,7 +2,7 @@
     'use strict';
 
     var api;
-    var state = {projects: [], sources: [], repositories: [], tasks: [], project: null, task: null, diff: null, profiles: [], runs: []};
+    var state = {projects: [], sources: [], repositories: [], tasks: [], project: null, task: null, diff: null, profiles: [], runs: [], approvals: []};
     var phases = ['Requirement', 'Architecture', 'Plan', 'Implementation', 'Verification', 'Review', 'Approval'];
 
     function escapeHtml(value) {
@@ -133,6 +133,23 @@
         return '<div class="code-pane-title"><div><span>Verification</span><b>Real commands, exit codes, and output</b></div><span class="code-scope-state valid">Fixed argv</span></div>' + commandCards + runs;
     }
 
+    function reviewTab() {
+        var task = state.task;
+        var approvalState = task.approvalState || 'draft';
+        var history = state.approvals.length ? '<div class="approval-history"><h3>Immutable audit</h3>' + state.approvals.map(function (record) {
+            return '<article><span>' + escapeHtml(record.action) + '</span><b>' + escapeHtml(record.actorId) + '</b><small>' + formatDate(record.createdAt) + (record.reason ? ' · ' + escapeHtml(record.reason) : '') + '</small></article>';
+        }).join('') + '</div>' : '<div class="code-tab-empty compact">No approval actions recorded.</div>';
+        var terminal = approvalState === 'discarded' || approvalState === 'applied';
+        return '<div class="code-pane-title"><div><span>Approval</span><b>Human-controlled Git lifecycle</b></div><span class="approval-state ' + escapeHtml(approvalState) + '">' + escapeHtml(approvalState) + '</span></div>' +
+            '<div class="approval-separation"><div><b>1. Approve changes</b><span>Records the exact diff hash. No Git mutation.</span></div><div><b>2. Apply to branch</b><span>Creates a commit only after fresh verification.</span></div></div>' +
+            '<div class="approval-actions"><button data-approval-action="revision" class="og-secondary-button"' + (terminal ? ' disabled' : '') + '>Request revision</button>' +
+            '<button data-approval-action="approve" class="og-primary-button"' + (terminal ? ' disabled' : '') + '>Approve changes</button>' +
+            '<button data-approval-action="apply" class="og-primary-button"' + (approvalState !== 'approved' ? ' disabled' : '') + '>Apply to branch</button>' +
+            '<button data-approval-action="export" class="og-secondary-button">Export patch</button>' +
+            '<button data-approval-action="discard" class="approval-danger"' + (terminal ? ' disabled' : '') + '>Discard</button></div>' +
+            (task.appliedCommit ? '<div class="applied-commit"><span>Applied commit</span><code>' + escapeHtml(task.appliedCommit) + '</code></div>' : '') + history;
+    }
+
     function renderResultTab(tab) {
         if (!state.task) return;
         document.querySelectorAll('[data-code-tab]').forEach(function (button) { button.classList.toggle('active', button.getAttribute('data-code-tab') === tab); });
@@ -141,11 +158,64 @@
         else if (tab === 'changes') target.innerHTML = changesTab();
         else if (tab === 'diff') target.innerHTML = diffTab();
         else if (tab === 'verification') target.innerHTML = verificationTab();
-        else if (tab === 'review') target.innerHTML = '<div class="code-tab-empty"><b>Review starts after verification.</b><span>No model reasoning or fabricated test status is shown here.</span></div>';
+        else if (tab === 'review') target.innerHTML = reviewTab();
         else target.innerHTML = '<div class="code-tab-empty"><b>Task Artifacts</b><span>Verification output uses immutable output references. Workflow Artifacts remain available in Projects.</span></div>';
         target.querySelectorAll('[data-run-command]').forEach(function (button) {
             button.addEventListener('click', function () { runVerification(button); });
         });
+        target.querySelectorAll('[data-approval-action]').forEach(function (button) {
+            button.addEventListener('click', function () { performApprovalAction(button.getAttribute('data-approval-action')); });
+        });
+    }
+
+    function actorPayload(reason) {
+        return {actorId: 'local-user', actorType: 'human', reason: reason || ''};
+    }
+
+    async function performApprovalAction(action) {
+        var reason = '';
+        try {
+            if (action === 'revision') {
+                reason = window.prompt('Describe the required revision:', '') || '';
+                if (!reason) return;
+                await api.requestRevision(state.project.id, state.task.id, actorPayload(reason));
+            } else if (action === 'approve') {
+                if (!window.confirm('Approve the exact current diff hash? This does not modify Git.')) return;
+                await api.approveChanges(state.project.id, state.task.id, actorPayload('Approved in Code Workspace'));
+            } else if (action === 'apply') {
+                if (!window.confirm('Create a commit on the isolated task branch? The base branch will not be merged.')) return;
+                var payload = actorPayload('Applied after explicit approval');
+                payload.commitMessage = 'Apply approved Code Task changes';
+                await api.applyChanges(state.project.id, state.task.id, payload);
+            } else if (action === 'export') {
+                var exported = await api.exportPatch(state.project.id, state.task.id, actorPayload('Manual patch export'));
+                var patch = await api.getRecoveryPatch(state.project.id, state.task.id, exported.patch.id);
+                downloadPatch(patch.patch);
+            } else if (action === 'discard') {
+                if (!window.confirm('Discard this isolated worktree? A recovery patch will be created first.')) return;
+                var discard = actorPayload('Discarded in Code Workspace');
+                discard.confirmation = 'DISCARD';
+                await api.discardCodeTask(state.project.id, state.task.id, discard);
+            }
+            await refreshCurrentTask();
+            renderResultTab('review');
+        } catch (error) { setMessage(error.message, 'error'); }
+    }
+
+    function downloadPatch(patch) {
+        var blob = new Blob([patch.content], {type: 'text/x-diff'});
+        var link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'oxygent-' + patch.taskId + '.patch';
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+
+    async function refreshCurrentTask() {
+        var result = await api.getCodeTask(state.project.id, state.task.id);
+        state.task = result.task;
+        state.tasks = state.tasks.map(function (item) { return item.id === state.task.id ? state.task : item; });
+        state.approvals = (await api.listApprovals(state.project.id, state.task.id)).items || [];
     }
 
     async function runVerification(button) {
@@ -166,6 +236,12 @@
         state.task = state.tasks.find(function (item) { return item.id === taskId; }) || null;
         if (!state.task) return renderEmpty();
         renderTaskShell(state.task);
+        if (state.task.approvalState === 'discarded') {
+            state.approvals = (await api.listApprovals(state.project.id, state.task.id)).items || [];
+            document.getElementById('repository-tree').innerHTML = '<span class="code-loading">Worktree discarded. Recovery patch remains available.</span>';
+            renderResultTab('review');
+            return;
+        }
         try {
             var repository = state.repositories.find(function (item) { return item.id === state.task.repositoryId; });
             document.getElementById('repository-name').textContent = repository ? repository.name : 'Repository';
@@ -174,12 +250,14 @@
                 api.getRepositoryTree(state.project.id, state.task.id, '.'),
                 api.getCodeTaskDiff(state.project.id, state.task.id),
                 api.listVerificationProfiles(state.project.id),
-                api.listVerificationRuns(state.project.id, state.task.id)
+                api.listVerificationRuns(state.project.id, state.task.id),
+                api.listApprovals(state.project.id, state.task.id)
             ]);
             var metadata = responses[0].result.data;
             state.diff = responses[2].diff;
             state.profiles = responses[3].items || [];
             state.runs = responses[4].items || [];
+            state.approvals = responses[5].items || [];
             document.querySelector('#repository-metadata [data-clean]');
             renderFiles(responses[1].result.data.files || []);
             renderResultTab(state.runs.length ? 'verification' : 'summary');

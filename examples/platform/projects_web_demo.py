@@ -8,6 +8,7 @@ from pathlib import Path
 
 from oxygent import MAS, oxy
 from oxygent.platform import (
+    ApprovalActionRequest,
     AgentProfile,
     AgentProfileRegistry,
     ChangeContract,
@@ -571,6 +572,15 @@ async def build_services() -> PlatformServices:
                 verification_profile.id,
                 "demo-unit-check",
             )
+            if os.getenv("OXYGENT_DEMO_SEED_APPROVAL") == "1":
+                await services.approve_code_changes(
+                    project.id,
+                    code_task.id,
+                    ApprovalActionRequest(
+                        actorId="demo-human-reviewer",
+                        reason="Approved in the credential-free local demo.",
+                    ),
+                )
     services.control_plane = build_control_plane(project.id)
     return services
 

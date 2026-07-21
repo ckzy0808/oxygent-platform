@@ -156,6 +156,7 @@ async def test_capabilities_and_nonempty_project_delete_guard(app: FastAPI):
             "codeWorkspace": False,
             "gitWorktrees": False,
             "diffVerification": False,
+            "approvalLifecycle": False,
             "agents": True,
             "models": True,
             "workflowTimeline": True,

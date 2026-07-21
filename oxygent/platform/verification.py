@@ -158,6 +158,7 @@ class VerificationRun(PlatformModel):
     failure_reason: str | None = None
     changed_files: list[str] = Field(default_factory=list)
     diff_line_count: int = Field(default=0, ge=0)
+    content_hash: str = Field(min_length=64, max_length=64)
     created_at: datetime = Field(default_factory=utc_now)
 
 
@@ -341,6 +342,7 @@ class VerificationRunner:
     ) -> tuple[VerificationRun, list[VerificationOutput]]:
         started = time.monotonic()
         command_hash = _command_hash(command)
+        content_hash = diff_content_hash(diff)
         try:
             ScopeGuard.check_diff(contract, diff.changed_files, diff.diff_line_count)
         except ScopeViolation as exc:
@@ -360,6 +362,7 @@ class VerificationRunner:
                     failureReason=str(exc),
                     changedFiles=diff.changed_files,
                     diffLineCount=diff.diff_line_count,
+                    contentHash=content_hash,
                 ),
                 [],
             )
@@ -460,6 +463,7 @@ class VerificationRunner:
             ),
             changedFiles=diff.changed_files,
             diffLineCount=diff.diff_line_count,
+            contentHash=content_hash,
         )
         return run, [stdout_output, stderr_output]
 
@@ -485,6 +489,20 @@ async def _read_bounded(
 def _command_hash(command: VerificationCommand) -> str:
     encoded = json.dumps(
         command.model_dump(mode="json", by_alias=True),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def diff_content_hash(snapshot: DiffSnapshot) -> str:
+    """Bind approvals and verification to the exact base and diff bytes."""
+    encoded = json.dumps(
+        {
+            "baseCommit": snapshot.base_commit,
+            "changedFiles": snapshot.changed_files,
+            "diff": snapshot.diff,
+        },
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")

@@ -38,6 +38,15 @@ class CodeTaskStatus(str, Enum):
     FAILED = "failed"
 
 
+class ApprovalState(str, Enum):
+    DRAFT = "draft"
+    REVISION_REQUESTED = "revisionRequested"
+    AWAITING_APPROVAL = "awaitingApproval"
+    APPROVED = "approved"
+    APPLIED = "applied"
+    DISCARDED = "discarded"
+
+
 class CodingOperation(str, Enum):
     METADATA = "metadata"
     TREE = "tree"
@@ -203,6 +212,13 @@ class CodeTask(PlatformModel):
     status: CodeTaskStatus = CodeTaskStatus.READY
     changed_files: list[str] = Field(default_factory=list)
     diff_line_count: int = Field(default=0, ge=0)
+    approval_state: ApprovalState = ApprovalState.DRAFT
+    approved_content_hash: str | None = Field(
+        default=None, min_length=64, max_length=64
+    )
+    applied_commit: str | None = Field(default=None, min_length=7, max_length=64)
+    recovery_patch_id: str | None = Field(default=None, max_length=160)
+    discarded_at: datetime | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -596,6 +612,35 @@ class WorktreeManager:
                 timeout=60.0,
             )
         return commit.strip(), branch, target
+
+    async def remove_worktree(
+        self,
+        repository: RepositoryProfile,
+        task: CodeTask,
+    ) -> None:
+        """Remove only the linked task worktree and its generated branch."""
+        root = self.resolve_repository(repository.root_reference)
+        target = Path(task.worktree_path).resolve()
+        try:
+            target.relative_to(self.workspace_root)
+        except ValueError as exc:
+            raise ScopeViolation(
+                "task worktree is outside the configured workspace root"
+            ) from exc
+        if target == root or root in target.parents:
+            raise ScopeViolation(
+                "source repository cannot be removed as a task worktree"
+            )
+        async with self._lock:
+            await run_git(
+                root,
+                "worktree",
+                "remove",
+                "--force",
+                str(target),
+                timeout=60.0,
+            )
+            await run_git(root, "branch", "-D", task.branch, timeout=30.0)
 
 
 def _task_branch(task_id: str) -> str:

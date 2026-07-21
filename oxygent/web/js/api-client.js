@@ -133,6 +133,27 @@
         },
         getVerificationOutput: function (projectId, taskId, outputId) {
             return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/verification-outputs/' + encodeURIComponent(outputId));
+        },
+        listApprovals: function (projectId, taskId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/approvals');
+        },
+        requestRevision: function (projectId, taskId, payload) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/request-revision', {method: 'POST', body: JSON.stringify(payload)});
+        },
+        approveChanges: function (projectId, taskId, payload) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/approve', {method: 'POST', body: JSON.stringify(payload)});
+        },
+        applyChanges: function (projectId, taskId, payload) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/apply', {method: 'POST', body: JSON.stringify(payload)});
+        },
+        exportPatch: function (projectId, taskId, payload) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/export-patch', {method: 'POST', body: JSON.stringify(payload)});
+        },
+        discardCodeTask: function (projectId, taskId, payload) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/discard', {method: 'POST', body: JSON.stringify(payload)});
+        },
+        getRecoveryPatch: function (projectId, taskId, patchId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/recovery-patches/' + encodeURIComponent(patchId));
         }
     };
 })();

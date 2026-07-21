@@ -17,6 +17,17 @@ from .artifacts import (
     TaskNode,
     ValidationStatus,
 )
+from .approvals import (
+    ApplyChangesRequest,
+    ApprovalAction,
+    ApprovalActionRequest,
+    ApprovalActorType,
+    ApprovalRecord,
+    DiscardChangesRequest,
+    InMemoryApprovalStore,
+    InMemoryRecoveryPatchStore,
+    RecoveryPatch,
+)
 from .api import ArtifactRevisionRequest, VerificationRunRequest, build_platform_router
 from .credentials import (
     CredentialResolver,
@@ -30,6 +41,7 @@ from .control_plane import (
     ProviderUpdate,
 )
 from .coding import (
+    ApprovalState,
     ChangeContract,
     CodeTask,
     CodeTaskCreate,
@@ -133,6 +145,7 @@ from .verification import (
     VerificationSlot,
     VerificationStatus,
     capture_diff,
+    diff_content_hash,
 )
 from .workflow import BasicRoleWorkflow
 
@@ -141,6 +154,12 @@ __all__ = [
     "AgentProfileRegistry",
     "ArchitectureDecision",
     "ArchitectureDecisionContent",
+    "ApplyChangesRequest",
+    "ApprovalAction",
+    "ApprovalActionRequest",
+    "ApprovalActorType",
+    "ApprovalRecord",
+    "ApprovalState",
     "ArtifactRevisionRequest",
     "Artifact",
     "ArtifactBase",
@@ -157,6 +176,7 @@ __all__ = [
     "CodingRunResult",
     "CredentialResolver",
     "DiffSnapshot",
+    "DiscardChangesRequest",
     "EnvironmentCredentialResolver",
     "EngineeringStatus",
     "ExecutionTrace",
@@ -165,12 +185,14 @@ __all__ = [
     "HealthResult",
     "HealthStatus",
     "InMemoryArtifactStore",
+    "InMemoryApprovalStore",
     "InMemoryCodeTaskStore",
     "InMemoryExecutionTraceStore",
     "InMemoryModelUsageStore",
     "InMemoryProjectRepository",
     "InMemoryProjectTaskRepository",
     "InMemoryRepositoryProfileStore",
+    "InMemoryRecoveryPatchStore",
     "InMemoryVerificationProfileStore",
     "InMemoryVerificationRunStore",
     "InvocationStatus",
@@ -210,6 +232,7 @@ __all__ = [
     "RegistryError",
     "RequirementSpec",
     "RequirementSpecContent",
+    "RecoveryPatch",
     "RepositoryProfile",
     "RepositoryRegistration",
     "RepositorySource",
@@ -252,6 +275,7 @@ __all__ = [
     "ProviderUpdate",
     "build_platform_router",
     "capture_diff",
+    "diff_content_hash",
     "default_provider_adapters",
     "default_role_definitions",
     "project_workflow_run",

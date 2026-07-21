@@ -14,9 +14,21 @@ from pydantic import Field
 from oxygent.utils.common_utils import generate_uuid
 
 from .artifacts import ArtifactBase, InMemoryArtifactStore, ValidationStatus
+from .approvals import (
+    ApplyChangesRequest,
+    ApprovalAction,
+    ApprovalActionRequest,
+    ApprovalActorType,
+    ApprovalRecord,
+    DiscardChangesRequest,
+    InMemoryApprovalStore,
+    InMemoryRecoveryPatchStore,
+    RecoveryPatch,
+)
 from .common import PlatformModel, utc_now
 from .control_plane import PlatformControlPlane
 from .coding import (
+    ApprovalState,
     CodeTask,
     CodeTaskCreate,
     CodingEngine,
@@ -53,7 +65,9 @@ from .verification import (
     VerificationRun,
     VerificationRunner,
     VerificationOutput,
+    VerificationStatus,
     capture_diff,
+    diff_content_hash,
 )
 
 
@@ -88,8 +102,13 @@ class PlatformServices:
         default_factory=InMemoryVerificationRunStore
     )
     verification_runner: VerificationRunner = field(default_factory=VerificationRunner)
+    approvals: InMemoryApprovalStore = field(default_factory=InMemoryApprovalStore)
+    recovery_patches: InMemoryRecoveryPatchStore = field(
+        default_factory=InMemoryRecoveryPatchStore
+    )
     _activities: list[ProjectActivity] = field(default_factory=list, init=False)
     _activity_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
+    _code_action_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
 
     @classmethod
     def with_code_workspace(
@@ -370,6 +389,17 @@ class PlatformServices:
                 update={
                     "changed_files": snapshot.changed_files,
                     "diff_line_count": snapshot.diff_line_count,
+                    "approval_state": (
+                        ApprovalState.AWAITING_APPROVAL
+                        if run.status is VerificationStatus.PASSED
+                        and task.approval_state
+                        in {
+                            ApprovalState.DRAFT,
+                            ApprovalState.REVISION_REQUESTED,
+                            ApprovalState.AWAITING_APPROVAL,
+                        }
+                        else task.approval_state
+                    ),
                     "updated_at": utc_now(),
                 }
             )
@@ -381,6 +411,280 @@ class PlatformServices:
             run.id,
         )
         return run
+
+    async def request_code_revision(
+        self,
+        project_id: str,
+        task_id: str,
+        payload: ApprovalActionRequest,
+    ) -> tuple[CodeTask, ApprovalRecord]:
+        async with self._code_action_lock:
+            task = await self._get_actionable_code_task(project_id, task_id)
+            if task.approval_state is ApprovalState.APPLIED:
+                raise ValueError("applied changes cannot return to revision state")
+            record = ApprovalRecord(
+                projectId=project_id,
+                taskId=task.id,
+                action=ApprovalAction.REQUEST_REVISION,
+                actorId=payload.actor_id,
+                actorType=payload.actor_type,
+                reason=payload.reason,
+                contentHash=task.approved_content_hash,
+            )
+            await self.approvals.append(record)
+            updated = task.model_copy(
+                update={
+                    "approval_state": ApprovalState.REVISION_REQUESTED,
+                    "approved_content_hash": None,
+                    "updated_at": utc_now(),
+                }
+            )
+            await self.code_tasks.update(updated)
+            await self._record_activity(
+                project_id,
+                "codeTask.revisionRequested",
+                "Revision requested",
+                task.id,
+            )
+            return updated, record
+
+    async def approve_code_changes(
+        self,
+        project_id: str,
+        task_id: str,
+        payload: ApprovalActionRequest,
+    ) -> tuple[CodeTask, ApprovalRecord]:
+        async with self._code_action_lock:
+            task = await self._get_actionable_code_task(project_id, task_id)
+            if task.approval_state is ApprovalState.APPLIED:
+                raise ValueError("applied changes are already final on the task branch")
+            if (
+                task.change_contract.risk.value == "high"
+                and payload.actor_type is not ApprovalActorType.HUMAN
+            ):
+                raise ScopeViolation("high-risk changes require human approval")
+            snapshot = await capture_diff(Path(task.worktree_path), task.base_commit)
+            self._validate_approval_snapshot(task, snapshot)
+            content_hash = diff_content_hash(snapshot)
+            matching_runs = await self._matching_verification_runs(
+                task.id, content_hash
+            )
+            record = ApprovalRecord(
+                projectId=project_id,
+                taskId=task.id,
+                action=ApprovalAction.APPROVE_CHANGES,
+                actorId=payload.actor_id,
+                actorType=payload.actor_type,
+                reason=payload.reason,
+                contentHash=content_hash,
+                verificationRunIds=[run.id for run in matching_runs],
+            )
+            await self.approvals.append(record)
+            updated = task.model_copy(
+                update={
+                    "approval_state": ApprovalState.APPROVED,
+                    "approved_content_hash": content_hash,
+                    "updated_at": utc_now(),
+                }
+            )
+            await self.code_tasks.update(updated)
+            await self._record_activity(
+                project_id,
+                "codeTask.approved",
+                "Changes approved; no Git mutation performed",
+                task.id,
+            )
+            return updated, record
+
+    async def apply_code_changes(
+        self,
+        project_id: str,
+        task_id: str,
+        payload: ApplyChangesRequest,
+    ) -> tuple[CodeTask, ApprovalRecord]:
+        async with self._code_action_lock:
+            task = await self._get_actionable_code_task(project_id, task_id)
+            if task.approval_state is not ApprovalState.APPROVED:
+                raise ValueError("changes must be approved before Apply to branch")
+            snapshot = await capture_diff(Path(task.worktree_path), task.base_commit)
+            self._validate_approval_snapshot(task, snapshot)
+            content_hash = diff_content_hash(snapshot)
+            if content_hash != task.approved_content_hash:
+                raise ScopeViolation(
+                    "approved content is stale; approve the current diff again"
+                )
+            matching_runs = await self._matching_verification_runs(
+                task.id, content_hash
+            )
+            if not matching_runs:
+                raise ScopeViolation(
+                    "verification is missing or stale for the approved diff"
+                )
+            worktree = Path(task.worktree_path)
+            await run_git(worktree, "add", "--all")
+            await run_git(
+                worktree,
+                "-c",
+                "user.name=OxyGent",
+                "-c",
+                "user.email=oxygent@localhost",
+                "commit",
+                "-m",
+                payload.commit_message,
+                timeout=60.0,
+            )
+            _, commit, _, _ = await run_git(worktree, "rev-parse", "HEAD")
+            applied_commit = commit.strip()
+            record = ApprovalRecord(
+                projectId=project_id,
+                taskId=task.id,
+                action=ApprovalAction.APPLY_TO_BRANCH,
+                actorId=payload.actor_id,
+                actorType=payload.actor_type,
+                reason=payload.reason,
+                contentHash=content_hash,
+                verificationRunIds=[run.id for run in matching_runs],
+                appliedCommit=applied_commit,
+            )
+            await self.approvals.append(record)
+            updated = task.model_copy(
+                update={
+                    "approval_state": ApprovalState.APPLIED,
+                    "applied_commit": applied_commit,
+                    "updated_at": utc_now(),
+                }
+            )
+            await self.code_tasks.update(updated)
+            await self._record_activity(
+                project_id,
+                "codeTask.appliedToBranch",
+                f"Approved changes committed to {task.branch}",
+                task.id,
+            )
+            return updated, record
+
+    async def export_code_patch(
+        self,
+        project_id: str,
+        task_id: str,
+        payload: ApprovalActionRequest,
+    ) -> tuple[RecoveryPatch, ApprovalRecord]:
+        async with self._code_action_lock:
+            task = await self._get_actionable_code_task(project_id, task_id)
+            patch = await self._create_recovery_patch(task)
+            record = ApprovalRecord(
+                projectId=project_id,
+                taskId=task.id,
+                action=ApprovalAction.EXPORT_PATCH,
+                actorId=payload.actor_id,
+                actorType=payload.actor_type,
+                reason=payload.reason,
+                contentHash=patch.content_hash,
+                recoveryPatchId=patch.id,
+            )
+            await self.approvals.append(record)
+            await self._record_activity(
+                project_id,
+                "codeTask.patchExported",
+                "Recovery patch exported",
+                patch.id,
+            )
+            return patch, record
+
+    async def discard_code_task(
+        self,
+        project_id: str,
+        task_id: str,
+        payload: DiscardChangesRequest,
+    ) -> tuple[CodeTask, ApprovalRecord, RecoveryPatch]:
+        async with self._code_action_lock:
+            task = await self._get_actionable_code_task(project_id, task_id)
+            patch = await self._create_recovery_patch(task)
+            repository = await self.repositories.get(task.repository_id)
+            if not self.worktrees:
+                raise ValueError("Code Workspace is not configured")
+            await self.worktrees.remove_worktree(repository, task)
+            record = ApprovalRecord(
+                projectId=project_id,
+                taskId=task.id,
+                action=ApprovalAction.DISCARD,
+                actorId=payload.actor_id,
+                actorType=payload.actor_type,
+                reason=payload.reason,
+                contentHash=patch.content_hash,
+                recoveryPatchId=patch.id,
+            )
+            await self.approvals.append(record)
+            now = utc_now()
+            updated = task.model_copy(
+                update={
+                    "approval_state": ApprovalState.DISCARDED,
+                    "recovery_patch_id": patch.id,
+                    "discarded_at": now,
+                    "updated_at": now,
+                }
+            )
+            await self.code_tasks.update(updated)
+            await self._record_activity(
+                project_id,
+                "codeTask.discarded",
+                "Worktree discarded after recovery patch export",
+                task.id,
+            )
+            return updated, record, patch
+
+    async def get_recovery_patch(
+        self, project_id: str, task_id: str, patch_id: str
+    ) -> RecoveryPatch:
+        patch = await self.recovery_patches.get(patch_id)
+        if patch.project_id != project_id or patch.task_id != task_id:
+            raise KeyError(f"recovery patch not found: {patch_id}")
+        return patch
+
+    async def _get_actionable_code_task(
+        self, project_id: str, task_id: str
+    ) -> CodeTask:
+        task = await self.code_tasks.get(task_id)
+        if task.project_id != project_id:
+            raise KeyError(f"code task not found: {task_id}")
+        if task.approval_state is ApprovalState.DISCARDED:
+            raise ValueError("discarded Code Task is immutable")
+        return task
+
+    @staticmethod
+    def _validate_approval_snapshot(task: CodeTask, snapshot: DiffSnapshot) -> None:
+        if snapshot.truncated:
+            raise ScopeViolation("truncated diff cannot be approved or applied")
+        if not snapshot.changed_files:
+            raise ValueError("Code Task has no changes")
+        ScopeGuard.check_diff(
+            task.change_contract,
+            snapshot.changed_files,
+            snapshot.diff_line_count,
+        )
+
+    async def _matching_verification_runs(
+        self, task_id: str, content_hash: str
+    ) -> list[VerificationRun]:
+        return [
+            run
+            for run in await self.verification_runs.list(task_id)
+            if run.status is VerificationStatus.PASSED
+            and run.content_hash == content_hash
+        ]
+
+    async def _create_recovery_patch(self, task: CodeTask) -> RecoveryPatch:
+        snapshot = await capture_diff(Path(task.worktree_path), task.base_commit)
+        if snapshot.truncated:
+            raise ScopeViolation("truncated diff cannot be exported as recovery patch")
+        patch = RecoveryPatch(
+            projectId=task.project_id,
+            taskId=task.id,
+            baseCommit=task.base_commit,
+            contentHash=diff_content_hash(snapshot),
+            content=snapshot.diff,
+        )
+        return await self.recovery_patches.append(patch)
 
     async def get_verification_output(
         self, project_id: str, task_id: str, output_id: str

@@ -13,6 +13,11 @@ from pydantic import Field
 from oxygent.schemas import WebResponse
 
 from .artifacts import ValidationStatus
+from .approvals import (
+    ApplyChangesRequest,
+    ApprovalActionRequest,
+    DiscardChangesRequest,
+)
 from .common import PlatformModel
 from .coding import (
     CodeTaskCreate,
@@ -288,6 +293,19 @@ def _workflow_event_view(control: PlatformControlPlane, event: Any) -> dict[str,
     return data
 
 
+def _recovery_patch_view(patch: Any) -> dict[str, Any]:
+    """Return patch metadata without putting source content in ordinary views."""
+    return {
+        "id": patch.id,
+        "projectId": patch.project_id,
+        "taskId": patch.task_id,
+        "baseCommit": patch.base_commit,
+        "contentHash": patch.content_hash,
+        "sizeBytes": len(patch.content.encode("utf-8")),
+        "createdAt": patch.created_at.isoformat(),
+    }
+
+
 def build_platform_router(services: PlatformServices) -> APIRouter:
     """Build a router bound to an explicit, caller-owned service container."""
     router = APIRouter(prefix="/api/v1/platform", tags=["platform"])
@@ -303,6 +321,7 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
                 "codeWorkspace": services.code_workspace_configured,
                 "gitWorktrees": services.code_workspace_configured,
                 "diffVerification": services.code_workspace_configured,
+                "approvalLifecycle": services.code_workspace_configured,
                 "agents": True,
                 "models": True,
                 "workflowTimeline": True,
@@ -888,5 +907,144 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
         except KeyError as exc:
             raise _not_found(exc) from exc
         return _response(output=_dump(output))
+
+    @router.get("/projects/{project_id}/code-tasks/{task_id}/approvals")
+    async def list_code_task_approvals(
+        project_id: str, task_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            task = await services.code_tasks.get(task_id)
+            if task.project_id != project_id:
+                raise KeyError(f"code task not found: {task_id}")
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        records = await services.approvals.list(task_id)
+        return _response(items=[_dump(record) for record in records])
+
+    @router.post(
+        "/projects/{project_id}/code-tasks/{task_id}/request-revision",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def request_code_revision(
+        project_id: str,
+        task_id: str,
+        payload: ApprovalActionRequest,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            task, record = await services.request_code_revision(
+                project_id, task_id, payload
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(task=_dump(task), approval=_dump(record))
+
+    @router.post(
+        "/projects/{project_id}/code-tasks/{task_id}/approve",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def approve_code_changes(
+        project_id: str,
+        task_id: str,
+        payload: ApprovalActionRequest,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            task, record = await services.approve_code_changes(
+                project_id, task_id, payload
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(task=_dump(task), approval=_dump(record))
+
+    @router.post(
+        "/projects/{project_id}/code-tasks/{task_id}/apply",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def apply_code_changes(
+        project_id: str,
+        task_id: str,
+        payload: ApplyChangesRequest,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            task, record = await services.apply_code_changes(
+                project_id, task_id, payload
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(task=_dump(task), approval=_dump(record))
+
+    @router.post(
+        "/projects/{project_id}/code-tasks/{task_id}/export-patch",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def export_code_patch(
+        project_id: str,
+        task_id: str,
+        payload: ApprovalActionRequest,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            patch, record = await services.export_code_patch(
+                project_id, task_id, payload
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(patch=_recovery_patch_view(patch), approval=_dump(record))
+
+    @router.post(
+        "/projects/{project_id}/code-tasks/{task_id}/discard",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def discard_code_task(
+        project_id: str,
+        task_id: str,
+        payload: DiscardChangesRequest,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            task, record, patch = await services.discard_code_task(
+                project_id, task_id, payload
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(
+            task=_dump(task),
+            approval=_dump(record),
+            recoveryPatch=_recovery_patch_view(patch),
+        )
+
+    @router.get(
+        "/projects/{project_id}/code-tasks/{task_id}/recovery-patches/{patch_id}"
+    )
+    async def get_recovery_patch(
+        project_id: str,
+        task_id: str,
+        patch_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            patch = await services.get_recovery_patch(project_id, task_id, patch_id)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        return _response(patch=_dump(patch))
 
     return router
