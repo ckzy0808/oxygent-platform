@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 import re
+from ipaddress import ip_address
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import Field
 
 from oxygent.schemas import WebResponse
 
 from .artifacts import ValidationStatus
 from .common import PlatformModel
+from .coding import (
+    CodeTaskCreate,
+    CodeWorkspaceError,
+    CodingOperation,
+    RepositoryRegistration,
+    ScopeViolation,
+)
 from .control_plane import (
     PlatformControlPlane,
     ProviderCreate,
@@ -48,6 +56,36 @@ def _not_found(exc: KeyError) -> HTTPException:
 
 def _registry_not_found(exc: RegistryError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+def _is_loopback_request(request: Request) -> bool:
+    """Trust the socket peer only; forwarded headers are intentionally ignored."""
+    if request.client is None:
+        return False
+    host = request.client.host
+    if host == "localhost":
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _require_code_access(request: Request, services: PlatformServices) -> None:
+    if services.code_authorization_enabled or _is_loopback_request(request):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Code Workspace requires loopback access or authorization middleware",
+    )
+
+
+def _code_workspace_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, ScopeViolation):
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        )
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
 def _safe_credential_reference(reference: str) -> str:
@@ -256,8 +294,8 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
                 "projects": True,
                 "artifacts": True,
                 "chatToProjectTask": True,
-                "codeWorkspace": False,
-                "gitWorktrees": False,
+                "codeWorkspace": services.code_workspace_configured,
+                "gitWorktrees": services.code_workspace_configured,
                 "agents": True,
                 "models": True,
                 "workflowTimeline": True,
@@ -587,5 +625,162 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
         except KeyError as exc:
             raise _not_found(exc) from exc
         return _response(items=[_dump(item) for item in activity])
+
+    @router.get("/code/repository-sources")
+    async def list_repository_sources(request: Request) -> dict[str, Any]:
+        _require_code_access(request, services)
+        items = services.worktrees.sources() if services.worktrees else []
+        return _response(items=[_dump(item) for item in items])
+
+    @router.get("/code/repositories")
+    async def list_code_repositories(
+        request: Request,
+        project_id: str | None = Query(default=None, alias="projectId"),
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        items = await services.repositories.list(project_id)
+        return _response(items=[_dump(item) for item in items])
+
+    @router.post(
+        "/projects/{project_id}/repositories",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def register_project_repository(
+        project_id: str,
+        payload: RepositoryRegistration,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            repository = await services.register_repository(project_id, payload)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(repository=_dump(repository))
+
+    @router.get("/projects/{project_id}/repositories")
+    async def list_project_repositories(
+        project_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            await services.projects.get(project_id)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        items = await services.repositories.list(project_id)
+        return _response(items=[_dump(item) for item in items])
+
+    @router.post(
+        "/projects/{project_id}/code-tasks",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def create_project_code_task(
+        project_id: str,
+        payload: CodeTaskCreate,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            task = await services.create_code_task(project_id, payload)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(task=_dump(task))
+
+    @router.get("/projects/{project_id}/code-tasks")
+    async def list_project_code_tasks(
+        project_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            await services.projects.get(project_id)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        items = await services.code_tasks.list(project_id)
+        return _response(items=[_dump(item) for item in items])
+
+    @router.get("/projects/{project_id}/code-tasks/{task_id}")
+    async def get_project_code_task(
+        project_id: str, task_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            task = await services.code_tasks.get(task_id)
+            if task.project_id != project_id:
+                raise KeyError(f"code task not found: {task_id}")
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        return _response(task=_dump(task))
+
+    async def code_read(
+        project_id: str,
+        task_id: str,
+        request: Request,
+        operation: CodingOperation,
+        *,
+        path: str | None = None,
+        query: str | None = None,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            result = await services.execute_code_read(
+                project_id,
+                task_id,
+                operation=operation,
+                path=path,
+                query=query,
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(result=_dump(result))
+
+    @router.get("/projects/{project_id}/code-tasks/{task_id}/repository/metadata")
+    async def get_code_repository_metadata(
+        project_id: str, task_id: str, request: Request
+    ) -> dict[str, Any]:
+        return await code_read(project_id, task_id, request, CodingOperation.METADATA)
+
+    @router.get("/projects/{project_id}/code-tasks/{task_id}/repository/tree")
+    async def get_code_repository_tree(
+        project_id: str,
+        task_id: str,
+        request: Request,
+        path: str = Query(default=".", max_length=1000),
+    ) -> dict[str, Any]:
+        return await code_read(
+            project_id, task_id, request, CodingOperation.TREE, path=path
+        )
+
+    @router.get("/projects/{project_id}/code-tasks/{task_id}/repository/search")
+    async def search_code_repository(
+        project_id: str,
+        task_id: str,
+        request: Request,
+        query: str = Query(min_length=1, max_length=500),
+        path: str = Query(default=".", max_length=1000),
+    ) -> dict[str, Any]:
+        return await code_read(
+            project_id,
+            task_id,
+            request,
+            CodingOperation.SEARCH,
+            path=path,
+            query=query,
+        )
+
+    @router.get("/projects/{project_id}/code-tasks/{task_id}/repository/file")
+    async def read_code_repository_file(
+        project_id: str,
+        task_id: str,
+        request: Request,
+        path: str = Query(min_length=1, max_length=1000),
+    ) -> dict[str, Any]:
+        return await code_read(
+            project_id, task_id, request, CodingOperation.READ_FILE, path=path
+        )
 
     return router

@@ -10,6 +10,7 @@
         'Explain repository': 'Explain the selected repository structure, important modules, dependencies, and test strategy.'
     };
     var platformProjects = [];
+    var codeRepositories = [];
 
     function escapeHtml(value) {
         return String(value == null ? '' : value).replace(/[&<>'"]/g, function (character) {
@@ -79,6 +80,47 @@
         } catch (_error) {
             button.disabled = true;
             button.title = 'Projects API is not configured';
+        }
+    }
+
+    function setOptions(select, items, valueKey, label) {
+        select.innerHTML = items.length ? items.map(function (item) {
+            return '<option value="' + escapeHtml(item[valueKey]) + '">' + escapeHtml(label(item)) + '</option>';
+        }).join('') : '<option>No options configured</option>';
+        select.disabled = items.length === 0;
+    }
+
+    async function mountCodeSelectors() {
+        if (!window.OxyGentApp || !window.OxyGentApp.api) return;
+        var repositorySelect = document.getElementById('code-repository');
+        var branchSelect = document.getElementById('code-base-branch');
+        var workflowSelect = document.getElementById('code-workflow');
+        var teamSelect = document.getElementById('code-agent-team');
+        if (!repositorySelect || !branchSelect || !workflowSelect || !teamSelect) return;
+        try {
+            var responses = await Promise.all([
+                window.OxyGentApp.api.capabilities(),
+                window.OxyGentApp.api.listRepositories(),
+                window.OxyGentApp.api.listWorkflowRuns(),
+                window.OxyGentApp.api.listAgents()
+            ]);
+            if (!responses[0].capabilities.codeWorkspace) throw new Error('Code Workspace is not configured');
+            codeRepositories = responses[1].items || [];
+            setOptions(repositorySelect, codeRepositories, 'id', function (item) { return item.name; });
+            setOptions(workflowSelect, responses[2].items || [], 'runId', function (item) { return item.name; });
+            var agents = responses[3].items || [];
+            var teams = agents.length ? [{id: 'configured-team', name: agents.length + '-role configured team'}] : [];
+            setOptions(teamSelect, teams, 'id', function (item) { return item.name; });
+            function updateBranches() {
+                var repository = codeRepositories.find(function (item) { return item.id === repositorySelect.value; });
+                var branches = repository ? repository.allowedBaseBranches.map(function (name) { return {name: name}; }) : [];
+                setOptions(branchSelect, branches, 'name', function (item) { return item.name; });
+            }
+            repositorySelect.addEventListener('change', updateBranches);
+            updateBranches();
+        } catch (error) {
+            repositorySelect.innerHTML = '<option>Configure in Code Workspace</option>';
+            document.getElementById('code-mode-note').textContent = error.message + '. General Chat remains available.';
         }
     }
 
@@ -176,6 +218,7 @@
             });
         });
         mountProjectTaskConversion();
+        mountCodeSelectors();
         selectMode('general');
     }
 

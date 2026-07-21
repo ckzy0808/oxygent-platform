@@ -3,11 +3,14 @@
 import asyncio
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from oxygent import MAS, oxy
 from oxygent.platform import (
     AgentProfile,
     AgentProfileRegistry,
+    ChangeContract,
+    CodeTaskCreate,
     EngineeringStatus,
     HealthResult,
     HealthStatus,
@@ -27,6 +30,7 @@ from oxygent.platform import (
     ProviderType,
     RequirementSpec,
     RequirementSpecContent,
+    RepositoryRegistration,
     RoleModelPolicy,
     RoleModelPolicyRegistry,
     RoleRegistry,
@@ -437,7 +441,17 @@ def build_control_plane(project_id: str) -> PlatformControlPlane:
 
 
 async def build_services() -> PlatformServices:
-    services = PlatformServices()
+    demo_repository = os.getenv("OXYGENT_DEMO_REPOSITORY")
+    services = (
+        PlatformServices.with_code_workspace(
+            repository_roots={"demo-repository": Path(demo_repository)},
+            workspace_root=Path(
+                os.getenv("OXYGENT_CODE_WORKSPACE_ROOT", "/tmp/oxygent-code-worktrees")
+            ),
+        )
+        if demo_repository
+        else PlatformServices()
+    )
     project = await services.create_project(
         ProjectCreate(
             name="Agent Platform Workspace",
@@ -472,7 +486,7 @@ async def build_services() -> PlatformServices:
             ),
         )
     )
-    await services.create_task_from_chat(
+    project_task = await services.create_task_from_chat(
         project.id,
         ProjectTaskFromChat(
             title="Review the Project workspace foundation",
@@ -482,6 +496,38 @@ async def build_services() -> PlatformServices:
             sourceArtifactIds=[requirement.id],
         ),
     )
+    if demo_repository and os.getenv("OXYGENT_DEMO_SEED_CODE_TASK") == "1":
+        metadata = await services.worktrees.inspect_repository("demo-repository")
+        default_branch = metadata["defaultBranch"]
+        repository = await services.register_repository(
+            project.id,
+            RepositoryRegistration(
+                name=Path(demo_repository).name,
+                rootReference="demo-repository",
+                defaultBranch=default_branch,
+                allowedBaseBranches=[default_branch],
+            ),
+        )
+        await services.create_code_task(
+            project.id,
+            CodeTaskCreate(
+                repositoryId=repository.id,
+                projectTaskId=project_task.id,
+                baseBranch=default_branch,
+                changeContract=ChangeContract(
+                    objective="Add repository isolation and bounded code inspection.",
+                    acceptanceCriteria=[
+                        "The source working directory remains unchanged",
+                        "Repository reads stay inside the task worktree",
+                        "Scope limits are enforced by server code",
+                    ],
+                    allowedPaths=["oxygent/**", "tests/**", "docs/**", "examples/**"],
+                    forbiddenPaths=[".env*", "**/*.key", "**/*.pem"],
+                    maxChangedFiles=20,
+                    maxDiffLines=1000,
+                ),
+            ),
+        )
     services.control_plane = build_control_plane(project.id)
     return services
 

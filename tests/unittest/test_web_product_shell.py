@@ -161,6 +161,31 @@ def test_workflow_timeline_uses_unified_events_and_hides_private_reasoning():
     assert "listWorkflowEvents" in client
 
 
+def test_code_workspace_uses_isolated_repository_apis_and_scope_contract():
+    document = read_web_file("code.html")
+    script = read_web_file("js/code-page.js")
+    client = read_web_file("js/api-client.js")
+    chat = read_web_file("js/chat-modes.js")
+
+    assert "./js/code-page.js" in document
+    assert "./css/code-workspace.css" in document
+    for label in (
+        "Repository Context",
+        "Task Timeline",
+        "Change Contract",
+        "Worktree protected",
+        "Mutation remains gated",
+    ):
+        assert label in script
+    assert "listRepositorySources" in client
+    assert "createCodeTask" in client
+    assert "readRepositoryFile" in client
+    assert "Every Code Task runs in an isolated Git worktree" in read_web_file(
+        "index.html"
+    )
+    assert "mountCodeSelectors" in chat
+
+
 @pytest.mark.asyncio
 async def test_all_product_pages_are_served_by_existing_static_mount():
     app = FastAPI()

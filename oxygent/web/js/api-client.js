@@ -75,6 +75,42 @@
         },
         listWorkflowEvents: function (runId) {
             return request('/workflows/runs/' + encodeURIComponent(runId) + '/events');
+        },
+        listRepositorySources: function () { return request('/code/repository-sources'); },
+        listRepositories: function (projectId) {
+            var suffix = projectId ? '?projectId=' + encodeURIComponent(projectId) : '';
+            return request('/code/repositories' + suffix);
+        },
+        registerRepository: function (projectId, repository) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/repositories', {
+                method: 'POST', body: JSON.stringify(repository)
+            });
+        },
+        listCodeTasks: function (projectId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks');
+        },
+        createCodeTask: function (projectId, task) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks', {
+                method: 'POST', body: JSON.stringify(task)
+            });
+        },
+        getCodeTask: function (projectId, taskId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId));
+        },
+        getRepositoryMetadata: function (projectId, taskId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/repository/metadata');
+        },
+        getRepositoryTree: function (projectId, taskId, path) {
+            var suffix = path ? '?path=' + encodeURIComponent(path) : '';
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/repository/tree' + suffix);
+        },
+        searchRepository: function (projectId, taskId, query, path) {
+            var params = new URLSearchParams({query: query});
+            if (path) params.set('path', path);
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/repository/search?' + params.toString());
+        },
+        readRepositoryFile: function (projectId, taskId, path) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/repository/file?path=' + encodeURIComponent(path));
         }
     };
 })();

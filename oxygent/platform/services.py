@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from pydantic import Field
@@ -14,6 +15,23 @@ from oxygent.utils.common_utils import generate_uuid
 from .artifacts import ArtifactBase, InMemoryArtifactStore, ValidationStatus
 from .common import PlatformModel, utc_now
 from .control_plane import PlatformControlPlane
+from .coding import (
+    CodeTask,
+    CodeTaskCreate,
+    CodingEngine,
+    CodingOperation,
+    CodingRunRequest,
+    CodingRunResult,
+    InMemoryCodeTaskStore,
+    InMemoryRepositoryProfileStore,
+    NativeCodingEngine,
+    RepositoryProfile,
+    RepositoryRegistration,
+    ScopeGuard,
+    ScopeViolation,
+    WorktreeManager,
+    run_git,
+)
 from .projects import (
     InMemoryProjectRepository,
     InMemoryProjectTaskRepository,
@@ -44,8 +62,35 @@ class PlatformServices:
     tasks: ProjectTaskRepository = field(default_factory=InMemoryProjectTaskRepository)
     artifacts: InMemoryArtifactStore = field(default_factory=InMemoryArtifactStore)
     control_plane: PlatformControlPlane = field(default_factory=PlatformControlPlane)
+    repositories: InMemoryRepositoryProfileStore = field(
+        default_factory=InMemoryRepositoryProfileStore
+    )
+    code_tasks: InMemoryCodeTaskStore = field(default_factory=InMemoryCodeTaskStore)
+    coding_engine: CodingEngine = field(default_factory=NativeCodingEngine)
+    worktrees: WorktreeManager | None = None
+    code_authorization_enabled: bool = False
     _activities: list[ProjectActivity] = field(default_factory=list, init=False)
     _activity_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
+
+    @classmethod
+    def with_code_workspace(
+        cls,
+        *,
+        repository_roots: dict[str, Path],
+        workspace_root: Path,
+        code_authorization_enabled: bool = False,
+        **kwargs: Any,
+    ) -> PlatformServices:
+        """Build services with an explicit repository allow-list and worktree root."""
+        return cls(
+            worktrees=WorktreeManager(repository_roots, workspace_root),
+            code_authorization_enabled=code_authorization_enabled,
+            **kwargs,
+        )
+
+    @property
+    def code_workspace_configured(self) -> bool:
+        return bool(self.worktrees and self.worktrees.configured)
 
     async def create_project(self, payload: ProjectCreate) -> Project:
         project = Project(**payload.model_dump())
@@ -98,6 +143,116 @@ class PlatformServices:
             task.id,
         )
         return task
+
+    async def register_repository(
+        self, project_id: str, payload: RepositoryRegistration
+    ) -> RepositoryProfile:
+        await self.projects.get(project_id)
+        if not self.worktrees:
+            raise ValueError("Code Workspace is not configured")
+        self.worktrees.resolve_repository(payload.root_reference)
+        for branch in payload.allowed_base_branches:
+            root = self.worktrees.resolve_repository(payload.root_reference)
+            await run_git(root, "rev-parse", "--verify", f"{branch}^{{commit}}")
+        profile = RepositoryProfile(project_id=project_id, **payload.model_dump())
+        await self.repositories.create(profile)
+        await self._touch_project(project_id)
+        await self._record_activity(
+            project_id,
+            "repository.registered",
+            f"Repository registered: {profile.name}",
+            profile.id,
+        )
+        return profile
+
+    async def create_code_task(
+        self, project_id: str, payload: CodeTaskCreate
+    ) -> CodeTask:
+        await self.projects.get(project_id)
+        repository = await self.repositories.get(payload.repository_id)
+        if repository.project_id != project_id:
+            raise ValueError("repository must belong to the target project")
+        if not repository.enabled:
+            raise ValueError("repository is disabled")
+        if payload.project_task_id:
+            project_task = await self.tasks.get(payload.project_task_id)
+            if project_task.project_id != project_id:
+                raise ValueError("Project Task must belong to the target project")
+        if not self.worktrees:
+            raise ValueError("Code Workspace is not configured")
+        task_id = generate_uuid()
+        base_branch = payload.base_branch or repository.default_branch
+        base_commit, branch, worktree = await self.worktrees.create_worktree(
+            repository, task_id, base_branch
+        )
+        task = CodeTask(
+            id=task_id,
+            projectId=project_id,
+            projectTaskId=payload.project_task_id,
+            repositoryId=repository.id,
+            baseBranch=base_branch,
+            baseCommit=base_commit,
+            branch=branch,
+            worktreePath=str(worktree),
+            changeContract=payload.change_contract,
+        )
+        await self.code_tasks.create(task)
+        await self._touch_project(project_id)
+        await self._record_activity(
+            project_id,
+            "codeTask.worktreeCreated",
+            f"Isolated worktree created for {task.branch}",
+            task.id,
+        )
+        return task
+
+    async def execute_code_read(
+        self,
+        project_id: str,
+        task_id: str,
+        *,
+        operation: CodingOperation,
+        path: str | None = None,
+        query: str | None = None,
+        max_results: int = 200,
+        max_output_bytes: int = 256_000,
+    ) -> CodingRunResult:
+        task = await self.code_tasks.get(task_id)
+        if task.project_id != project_id:
+            raise KeyError(f"code task not found: {task_id}")
+        if operation is CodingOperation.READ_FILE:
+            ScopeGuard.check_path(task.change_contract, path or "")
+        result = await self.coding_engine.execute(
+            CodingRunRequest(
+                taskId=task.id,
+                operation=operation,
+                worktreePath=task.worktree_path,
+                baseCommit=task.base_commit,
+                path=path,
+                query=query,
+                maxResults=max_results,
+                maxOutputBytes=max_output_bytes,
+            )
+        )
+        if operation is CodingOperation.TREE:
+            files = []
+            for item in result.data.get("files", []):
+                try:
+                    files.append(ScopeGuard.check_path(task.change_contract, item))
+                except ScopeViolation:
+                    continue
+            result.data["files"] = files
+        elif operation is CodingOperation.SEARCH:
+            matches = []
+            for item in result.data.get("matches", []):
+                candidate = item.split(":", 1)[0]
+                try:
+                    ScopeGuard.check_path(task.change_contract, candidate)
+                except ScopeViolation:
+                    continue
+                matches.append(item)
+            result.data["matches"] = matches
+        return result
 
     async def list_artifacts(
         self, project_id: str, *, latest_only: bool = False
