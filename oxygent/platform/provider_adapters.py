@@ -10,7 +10,8 @@ import httpx
 from pydantic import Field
 
 from oxygent.oxy.llms.openai_llm import OpenAILLM
-from oxygent.schemas import OxyRequest, OxyState, TokenUsage
+from oxygent.schemas import EstimationMethod, OxyRequest, OxyState, TokenUsage
+from oxygent.utils.token_utils import build_token_usage
 
 from .common import PlatformModel
 from .credentials import CredentialResolver
@@ -33,6 +34,7 @@ class ModelResponse(PlatformModel):
     output: str
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
+    token_count_method: EstimationMethod = EstimationMethod.EXACT
     latency_ms: float = Field(default=0.0, ge=0)
 
 
@@ -58,12 +60,19 @@ class ModelProviderAdapter(Protocol):
     ) -> HealthResult: ...
 
 
-def _usage_counts(usage: TokenUsage | dict[str, Any] | None) -> tuple[int, int]:
+def _usage_counts(
+    usage: TokenUsage | dict[str, Any] | None,
+) -> tuple[int, int, EstimationMethod]:
     if isinstance(usage, TokenUsage):
-        return usage.input_tokens, usage.output_tokens
+        return usage.input_tokens, usage.output_tokens, usage.estimation_method
     if isinstance(usage, dict):
-        return int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0))
-    return 0, 0
+        method = usage.get("estimation_method", EstimationMethod.EXACT)
+        return (
+            int(usage.get("input_tokens", 0)),
+            int(usage.get("output_tokens", 0)),
+            EstimationMethod(method),
+        )
+    return 0, 0, EstimationMethod.APPROXIMATE
 
 
 class BaseProviderAdapter:
@@ -113,11 +122,14 @@ class OpenAICompatibleAdapter(BaseProviderAdapter):
             raise ProviderCallError(
                 "OpenAI-compatible provider returned a failed state"
             )
-        input_tokens, output_tokens = _usage_counts(response.extra.get("usage"))
+        input_tokens, output_tokens, token_count_method = _usage_counts(
+            response.extra.get("usage")
+        )
         return ModelResponse(
             output=str(response.output),
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            token_count_method=token_count_method,
             latency_ms=latency_ms,
         )
 
@@ -143,6 +155,105 @@ class OpenAICompatibleAdapter(BaseProviderAdapter):
         except (httpx.HTTPError, TimeoutError) as exc:
             status = HealthStatus.UNAVAILABLE
             reason = type(exc).__name__
+        return HealthResult(
+            status=status,
+            latency_ms=(time.perf_counter() - started) * 1000,
+            reason=reason,
+        )
+
+
+class OpenAIResponsesAdapter(BaseProviderAdapter):
+    """Explicit OpenAI Responses API adapter for ``input``-based gateways."""
+
+    @staticmethod
+    def _payload(request: ModelRequest) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": request.model.model_name,
+            "input": request.messages,
+        }
+        parameter_map = {
+            "temperature": "temperature",
+            "top_p": "top_p",
+            "max_tokens": "max_output_tokens",
+            "max_output_tokens": "max_output_tokens",
+        }
+        for source, target in parameter_map.items():
+            if source in request.parameters:
+                payload[target] = request.parameters[source]
+        return payload
+
+    @staticmethod
+    def _output_text(data: dict[str, Any]) -> str:
+        values: list[str] = []
+        for output in data.get("output", []):
+            if not isinstance(output, dict):
+                continue
+            for content in output.get("content", []):
+                if not isinstance(content, dict):
+                    continue
+                if content.get("type") in {"output_text", "text"}:
+                    values.append(str(content.get("text", "")))
+        return "".join(values)
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        headers = {"Content-Type": "application/json"}
+        credential = self._credential(request.provider)
+        if credential:
+            headers["Authorization"] = f"Bearer {credential}"
+        started = time.perf_counter()
+        try:
+            async with httpx.AsyncClient(timeout=request.provider.timeout) as client:
+                response = await client.post(
+                    request.provider.base_url,
+                    headers=headers,
+                    json=self._payload(request),
+                )
+                response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise ProviderCallError(
+                f"OpenAI Responses provider returned HTTP {exc.response.status_code}"
+            ) from exc
+        except (httpx.HTTPError, TimeoutError) as exc:
+            raise ProviderCallError(
+                f"OpenAI Responses provider transport failed: {type(exc).__name__}"
+            ) from exc
+        latency_ms = (time.perf_counter() - started) * 1000
+        data = response.json()
+        output = self._output_text(data)
+        if not output:
+            raise ProviderCallError("OpenAI Responses provider returned no output text")
+        usage = build_token_usage(
+            data.get("usage") or None,
+            request.messages,
+            output,
+            request.model.model_name,
+        )
+        return ModelResponse(
+            output=output,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            token_count_method=usage.estimation_method,
+            latency_ms=latency_ms,
+        )
+
+    async def health_check(
+        self, provider: ProviderProfile, model: ModelProfile
+    ) -> HealthResult:
+        started = time.perf_counter()
+        try:
+            await self.complete(
+                ModelRequest(
+                    provider=provider,
+                    model=model,
+                    messages=[{"role": "user", "content": "Reply OK."}],
+                    parameters={"max_output_tokens": 4},
+                )
+            )
+            status = HealthStatus.HEALTHY
+            reason = "Responses API completed"
+        except ProviderCallError as exc:
+            status = HealthStatus.UNAVAILABLE
+            reason = str(exc)
         return HealthResult(
             status=status,
             latency_ms=(time.perf_counter() - started) * 1000,
@@ -202,11 +313,17 @@ class GeminiAdapter(BaseProviderAdapter):
         data = response.json()
         parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
         output = "".join(str(part.get("text", "")) for part in parts)
-        usage = data.get("usageMetadata", {})
+        usage = build_token_usage(
+            data.get("usageMetadata") or None,
+            request.messages,
+            output,
+            request.model.model_name,
+        )
         return ModelResponse(
             output=output,
-            input_tokens=int(usage.get("promptTokenCount", 0)),
-            output_tokens=int(usage.get("candidatesTokenCount", 0)),
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            token_count_method=usage.estimation_method,
             latency_ms=latency_ms,
         )
 
@@ -267,10 +384,23 @@ class OllamaAdapter(BaseProviderAdapter):
             response.raise_for_status()
         latency_ms = (time.perf_counter() - started) * 1000
         data = response.json()
+        output = str(data.get("message", {}).get("content", ""))
+        raw_usage = (
+            {
+                "prompt_tokens": data.get("prompt_eval_count", 0),
+                "completion_tokens": data.get("eval_count", 0),
+            }
+            if "prompt_eval_count" in data or "eval_count" in data
+            else None
+        )
+        usage = build_token_usage(
+            raw_usage, request.messages, output, request.model.model_name
+        )
         return ModelResponse(
-            output=str(data.get("message", {}).get("content", "")),
-            input_tokens=int(data.get("prompt_eval_count", 0)),
-            output_tokens=int(data.get("eval_count", 0)),
+            output=output,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            token_count_method=usage.estimation_method,
             latency_ms=latency_ms,
         )
 
@@ -322,6 +452,10 @@ def default_provider_adapters(
     registry.register(
         ProviderType.OPENAI_COMPATIBLE,
         OpenAICompatibleAdapter(credential_resolver),
+    )
+    registry.register(
+        ProviderType.OPENAI_RESPONSES,
+        OpenAIResponsesAdapter(credential_resolver),
     )
     registry.register(ProviderType.GEMINI, GeminiAdapter(credential_resolver))
     registry.register(ProviderType.OLLAMA, OllamaAdapter(credential_resolver))

@@ -13,7 +13,7 @@ function renderSwimlane(nodesDatas, containerId) {
     var BODY_PAD = 10;
 
     if (!nodesDatas || nodesDatas.length === 0) {
-        container.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">No nodes to display</p>';
+        container.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">暂无可显示的节点</p>';
         return;
     }
 
@@ -24,7 +24,7 @@ function renderSwimlane(nodesDatas, containerId) {
     // ── Find root node ──
     var rootNode = nodesDatas.find(function (n) { return !n.father_node_id; });
     if (!rootNode) {
-        container.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">No root node found</p>';
+        container.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">未找到根节点</p>';
         return;
     }
 
@@ -78,7 +78,7 @@ function renderSwimlane(nodesDatas, containerId) {
     });
 
     if (messages.length === 0) {
-        container.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">No messages to display</p>';
+        container.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">暂无可显示的消息</p>';
         return;
     }
 

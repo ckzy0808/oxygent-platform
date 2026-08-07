@@ -14,14 +14,14 @@
     };
 
     var primary = [
-        ['chat', 'Chat', 'index.html'],
-        ['projects', 'Projects', 'projects.html'],
-        ['code', 'Code', 'code.html'],
-        ['files', 'Files', 'files.html'],
-        ['agents', 'Agents', 'agents.html'],
-        ['models', 'Models', 'models.html'],
-        ['workflows', 'Workflows', 'workflows.html'],
-        ['insights', 'Insights', 'insights.html']
+        ['chat', '对话', 'index.html'],
+        ['projects', '项目', 'projects.html'],
+        ['code', '代码', 'code.html'],
+        ['files', '文件', 'files.html'],
+        ['agents', '智能体', 'agents.html'],
+        ['models', '模型', 'models.html'],
+        ['workflows', '工作流', 'workflows.html'],
+        ['insights', '洞察', 'insights.html']
     ];
 
     function item(spec, activePage) {
@@ -42,16 +42,16 @@
         var nav = document.createElement('aside');
         nav.id = 'og-app-nav';
         nav.className = 'og-app-nav';
-        nav.setAttribute('aria-label', 'Primary navigation');
+        nav.setAttribute('aria-label', '主导航');
         nav.innerHTML =
-            '<a class="og-app-brand" href="index.html" aria-label="OxyGent Chat">' +
+            '<a class="og-app-brand" href="index.html" aria-label="OxyGent 对话">' +
                 '<img src="./image/group-favicon.png" alt="OxyGent">' +
             '</a>' +
             '<nav class="og-app-nav-list">' +
                 primary.map(function (spec) { return item(spec, activePage); }).join('') +
             '</nav>' +
             '<div class="og-app-nav-footer">' +
-                item(['settings', 'Settings', 'settings.html'], activePage) +
+                item(['settings', '设置', 'settings.html'], activePage) +
             '</div>';
         document.body.insertBefore(nav, document.body.firstChild);
         document.body.classList.add('og-shell-enabled');

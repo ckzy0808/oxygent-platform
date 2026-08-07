@@ -107,22 +107,22 @@ function renderFlowchart(agentNodes, containerId) {
         const el = document.createElement('div');
         if (kind === 'start') {
             el.className = 'view1-node view1-node-start';
-            el.title = 'Start';
+            el.title = '开始';
             el.innerHTML =
                 '<svg class="view1-icon-svg" width="14" height="14" viewBox="0 0 18 18">' +
                 '<circle cx="9" cy="9" r="7" fill="#22c55e" stroke="#16a34a" stroke-width="1.5"/>' +
                 '<polygon points="7.5,5.5 13,9 7.5,12.5" fill="#fff"/>' +
                 '</svg>' +
-                '<span>Start</span>';
+                '<span>开始</span>';
         } else {
             el.className = 'view1-node view1-node-end';
-            el.title = 'End';
+            el.title = '结束';
             el.innerHTML =
                 '<svg class="view1-icon-svg" width="14" height="14" viewBox="0 0 18 18">' +
                 '<circle cx="9" cy="9" r="7" fill="#ef4444" stroke="#dc2626" stroke-width="1.5"/>' +
                 '<rect x="6.5" y="6.5" width="5" height="5" rx="0.5" fill="#fff"/>' +
                 '</svg>' +
-                '<span>End</span>';
+                '<span>结束</span>';
         }
         return el;
     }

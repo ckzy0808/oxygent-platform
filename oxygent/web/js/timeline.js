@@ -19,7 +19,7 @@ function renderTraceChain(nodesDatas, containerId) {
     };
 
     if (!nodesDatas || !nodesDatas.length) {
-        container.innerHTML = '<div class="view4-empty">No nodes for this trace.</div>';
+        container.innerHTML = '<div class="view4-empty">此追踪中暂无节点。</div>';
         return;
     }
 
@@ -29,7 +29,7 @@ function renderTraceChain(nodesDatas, containerId) {
     });
 
     if (!filtered.length) {
-        container.innerHTML = '<div class="view4-empty">No LLM or tool calls in this trace.</div>';
+        container.innerHTML = '<div class="view4-empty">此追踪中暂无 LLM 或工具调用。</div>';
         return;
     }
 
@@ -107,25 +107,25 @@ function renderTraceChain(nodesDatas, containerId) {
         var el = document.createElement('div');
         if (kind === 'start') {
             el.className = 'view4-node view4-node-start';
-            el.title = 'Start';
+            el.title = '开始';
             el.innerHTML =
                 '<div class="view4-main-row">' +
                 '<svg class="view4-icon-svg" width="20" height="20" viewBox="0 0 18 18">' +
                 '<circle cx="9" cy="9" r="7" fill="#22c55e" stroke="#16a34a" stroke-width="1.5"/>' +
                 '<polygon points="7.5,5.5 13,9 7.5,12.5" fill="#fff"/>' +
                 '</svg>' +
-                '<span class="view4-callee">Start</span>' +
+                '<span class="view4-callee">开始</span>' +
                 '</div>';
         } else {
             el.className = 'view4-node view4-node-end';
-            el.title = 'End';
+            el.title = '结束';
             el.innerHTML =
                 '<div class="view4-main-row">' +
                 '<svg class="view4-icon-svg" width="20" height="20" viewBox="0 0 18 18">' +
                 '<circle cx="9" cy="9" r="7" fill="#ef4444" stroke="#dc2626" stroke-width="1.5"/>' +
                 '<rect x="6.5" y="6.5" width="5" height="5" rx="0.5" fill="#fff"/>' +
                 '</svg>' +
-                '<span class="view4-callee">End</span>' +
+                '<span class="view4-callee">结束</span>' +
                 '</div>';
         }
         return el;

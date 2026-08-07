@@ -1,5 +1,6 @@
 """API integration tests for Agents, Models, Providers, and routing policies."""
 
+import asyncio
 import json
 
 import pytest
@@ -15,6 +16,7 @@ from oxygent.platform import (
     InMemoryModelUsageStore,
     InvocationStatus,
     ModelProfile,
+    ModelResponse,
     ModelRegistry,
     ModelUsage,
     PlatformControlPlane,
@@ -38,6 +40,19 @@ SECRET_VALUE = "super-secret-resolved-api-key"
 
 
 class SensitiveHealthAdapter:
+    def __init__(self):
+        self.requests = []
+
+    async def complete(self, request):
+        self.requests.append(request)
+        return ModelResponse(
+            output="done",
+            inputTokens=321,
+            outputTokens=45,
+            tokenCountMethod="exact",
+            latencyMs=18,
+        )
+
     async def health_check(self, _provider, _model):
         return HealthResult(
             status=HealthStatus.HEALTHY,
@@ -189,6 +204,91 @@ async def test_agent_model_policy_and_usage_views_are_enriched_and_redacted():
     assert SECRET_VALUE not in json.dumps(
         {"agents": agents, "providers": providers, "usage": usage}
     )
+
+
+@pytest.mark.asyncio
+async def test_aider_proxy_records_exact_tokens_immediately():
+    services = configured_services()
+    provider = services.control_plane.providers.get("provider-a")
+    model = services.control_plane.models.get("model-a")
+    services._technical_lead_model = lambda: (provider, model)
+
+    response = await services.complete_aider_proxy(
+        [{"role": "user", "content": "change the code"}],
+        {"max_tokens": 100, "reasoning_effort": "low"},
+        project_id="project",
+        task_id="task",
+        run_id="aider-run",
+    )
+
+    assert response["usage"] == {
+        "prompt_tokens": 321,
+        "completion_tokens": 45,
+        "total_tokens": 366,
+    }
+    record = services.control_plane.usage.for_run("aider-run")[0]
+    adapter = services.control_plane.adapters.get(ProviderType.OPENAI_COMPATIBLE)
+    assert record.invocation_type == "aider"
+    assert record.input_tokens == 321
+    assert record.output_tokens == 45
+    assert record.token_count_method.value == "exact"
+    assert adapter.requests[-1].provider.timeout == 300
+    assert adapter.requests[-1].parameters["reasoning_effort"] == "low"
+
+
+@pytest.mark.asyncio
+async def test_aider_proxy_exposes_live_estimated_tokens_without_double_counting():
+    services = configured_services()
+    provider = services.control_plane.providers.get("provider-a")
+    model = services.control_plane.models.get("model-a")
+    services._technical_lead_model = lambda: (provider, model)
+    adapter = services.control_plane.adapters.get(ProviderType.OPENAI_COMPATIBLE)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def delayed_complete(_request):
+        started.set()
+        await release.wait()
+        return ModelResponse(
+            output="done", inputTokens=321, outputTokens=45, latencyMs=18
+        )
+
+    adapter.complete = delayed_complete
+    invocation = asyncio.create_task(
+        services.complete_aider_proxy(
+            [{"role": "user", "content": "change a large source file"}],
+            {},
+            project_id="project",
+            task_id="task",
+            run_id="live-aider-run",
+        )
+    )
+    await started.wait()
+
+    live_records = services.control_plane.usage.for_run("live-aider-run")
+    assert len(live_records) == 1
+    assert live_records[0].status is InvocationStatus.RUNNING
+    assert live_records[0].input_tokens > 0
+    app = build_app(services)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        usage = (
+            await client.get(
+                "/api/v1/platform/usage",
+                params={"projectId": "project", "runId": "live-aider-run"},
+            )
+        ).json()["data"]
+    assert usage["summary"]["activeInvocations"] == 1
+    assert usage["summary"]["inputTokens"] > 0
+
+    release.set()
+    await invocation
+    completed_records = services.control_plane.usage.for_run("live-aider-run")
+    assert len(completed_records) == 1
+    assert completed_records[0].status is InvocationStatus.SUCCEEDED
+    assert completed_records[0].input_tokens == 321
+    assert completed_records[0].output_tokens == 45
 
 
 @pytest.mark.asyncio

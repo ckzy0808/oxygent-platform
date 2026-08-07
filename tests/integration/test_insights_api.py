@@ -122,8 +122,10 @@ async def test_insights_summary_and_breakdown_are_project_isolated():
     assert summary.status_code == 200
     data = summary.json()["data"]
     assert data["totals"]["invocations"] == 1
-    assert data["totals"]["estimatedCost"] == pytest.approx(0.012)
-    assert data["budgets"][0]["status"] == "exceeded"
+    assert data["totals"]["totalTokens"] == 150
+    assert data["totals"]["exactInvocations"] == 1
+    assert "estimatedCost" not in data["totals"]
+    assert "budgets" not in data
     assert len(breakdown.json()["data"]["items"]) == 1
     assert breakdown.json()["data"]["items"][0]["label"] == "Model A"
 

@@ -13,6 +13,7 @@ class ProviderType(str, Enum):
     """Protocols supported now, plus reserved native protocol identifiers."""
 
     OPENAI_COMPATIBLE = "openai-compatible"
+    OPENAI_RESPONSES = "openai-responses"
     GEMINI = "gemini"
     OLLAMA = "ollama"
     OPENAI_NATIVE = "openai-native"

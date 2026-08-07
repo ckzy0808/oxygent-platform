@@ -3,60 +3,60 @@
 
     var pages = {
         projects: {
-            eyebrow: 'Project workspace',
-            title: 'Projects',
-            description: 'Organize ideas, requirements, architecture, tasks, Artifacts, and Agent teams without changing the existing Chat workflow.',
-            tabs: ['Overview', 'Ideas', 'Requirements', 'Architecture', 'Tasks', 'Artifacts', 'Team', 'Activity', 'Settings'],
-            next: ['Project list and detail APIs', 'Artifact provenance and revisions', 'Convert Chat to Project Task']
+            eyebrow: '项目工作区',
+            title: '项目',
+            description: '在不改变现有对话流程的前提下，组织创意、需求、架构、任务、产物和智能体团队。',
+            tabs: ['概览', '创意', '需求', '架构', '任务', '产物', '团队', '活动', '设置'],
+            next: ['项目列表和详情 API', '产物来源和修订记录', '将对话转换为项目任务']
         },
         files: {
-            eyebrow: 'Shared context',
-            title: 'Files',
-            description: 'A future home for Chat attachments and Project file references. Source repositories remain isolated in Code Workspace.',
-            tabs: ['Recent', 'Attachments', 'Project files', 'Artifacts'],
-            next: ['Attachment references', 'Project isolation', 'Safe preview and download']
+            eyebrow: '共享上下文',
+            title: '文件',
+            description: '用于管理对话附件和项目文件引用。源代码仓库始终隔离在代码工作区中。',
+            tabs: ['最近使用', '附件', '项目文件', '产物'],
+            next: ['附件引用', '项目隔离', '安全预览和下载']
         },
         agents: {
-            eyebrow: 'Agent registry',
-            title: 'Agents',
-            description: 'Inspect role assignments, model policies, capabilities, Tool policies, runtime status, usage, cost, and success rate.',
-            tabs: ['Team', 'Roles', 'Agent profiles', 'Tool policies'],
-            next: ['Role-to-model mapping', 'Runtime status', 'Usage and success metrics']
+            eyebrow: '智能体注册表',
+            title: '智能体',
+            description: '查看角色分配、模型策略、能力、工具策略、运行状态、Token 用量和成功率。',
+            tabs: ['团队', '角色', '智能体配置', '工具策略'],
+            next: ['角色与模型映射', '运行状态', '用量和成功率指标']
         },
         models: {
-            eyebrow: 'Model control plane',
-            title: 'Models',
-            description: 'Manage Providers, model profiles, routing policies, health, and usage while keeping credentials masked.',
-            tabs: ['Providers', 'Models', 'Routing Policies', 'Usage'],
-            next: ['Provider health checks', 'Primary and fallback chains', 'Credential references only']
+            eyebrow: '模型控制面',
+            title: '模型',
+            description: '管理服务商、模型配置、路由策略、健康状态和用量，同时始终隐藏凭证。',
+            tabs: ['服务商', '模型', '路由策略', '用量'],
+            next: ['服务商健康检查', '主模型和备用模型链', '仅保存凭证引用']
         },
         workflows: {
-            eyebrow: 'Structured collaboration',
-            title: 'Workflows',
-            description: 'Track role-driven work as engineering phases and Artifacts instead of presenting execution as a group chat.',
-            tabs: ['Definitions', 'Runs', 'Timeline', 'Artifacts'],
-            next: ['Versioned workflow events', 'Phase status projection', 'Advanced Execution Drawer']
+            eyebrow: '结构化协作',
+            title: '工作流',
+            description: '以工程阶段和产物追踪角色驱动的工作，不将执行过程表现为普通群聊。',
+            tabs: ['定义', '运行记录', '时间线', '产物'],
+            next: ['版本化工作流事件', '阶段状态投影', '高级执行详情抽屉']
         },
         insights: {
-            eyebrow: 'Operations and economics',
-            title: 'Insights',
-            description: 'Understand tokens, estimated cost, latency, success rate, fallback behavior, and task outcomes by Project and role.',
-            tabs: ['Overview', 'Usage', 'Cost', 'Reliability'],
-            next: ['Project-level aggregation', 'Role and model breakdown', 'Budget warning states']
+            eyebrow: '运营与用量',
+            title: '洞察',
+            description: '按项目和角色了解真实 Token、计量方式、延迟、成功率、故障切换和任务结果。',
+            tabs: ['概览', '用量', '可靠性'],
+            next: ['项目级聚合', '角色和模型明细', '预算预警状态']
         },
         settings: {
-            eyebrow: 'Platform configuration',
-            title: 'Settings',
-            description: 'Configure platform defaults, security boundaries, workspace roots, and feature availability without exposing secrets.',
-            tabs: ['General', 'Security', 'Workspace', 'Features'],
-            next: ['Capability detection', 'Repository allow-list', 'Local and production safeguards']
+            eyebrow: '平台配置',
+            title: '设置',
+            description: '配置平台默认值、安全边界、工作区根目录和功能开关，同时避免泄露任何密钥。',
+            tabs: ['常规', '安全', '工作区', '功能'],
+            next: ['能力检测', '仓库允许列表', '本地和生产环境保护措施']
         },
         code: {
-            eyebrow: 'Engineering workspace',
-            title: 'Code',
-            description: 'Repository context, engineering phases, changes, and verification will live here. PR 1 adds the safe workspace shell only.',
-            tabs: ['Repositories', 'Code Tasks', 'Changes', 'Reviews', 'Verification'],
-            next: ['Isolated Git worktrees', 'System-enforced Change Contracts', 'Fixed-argument verification commands'],
+            eyebrow: '工程工作区',
+            title: '代码',
+            description: '在这里集中查看仓库上下文、工程阶段、代码变更和验证结果。',
+            tabs: ['代码仓库', '代码任务', '变更', '审查', '验证'],
+            next: ['隔离的 Git 工作树', '系统强制执行的变更契约', '固定参数的验证命令'],
             code: true
         }
     };
@@ -75,9 +75,9 @@
 
     function codeFoundation() {
         var columns = [
-            ['Repository Context', 6],
-            ['Task Timeline', 7],
-            ['Changes and Verification', 5]
+            ['仓库上下文', 6],
+            ['任务时间线', 7],
+            ['变更与验证', 5]
         ];
         return '<section class="og-foundation-card og-code-foundation">' +
             columns.map(function (column, index) {
@@ -103,21 +103,21 @@
             '<header class="og-workspace-header">' +
                 '<div><p class="og-workspace-eyebrow">' + escapeHtml(page.eyebrow) + '</p>' +
                 '<h1 class="og-workspace-title">' + escapeHtml(page.title) + '</h1></div>' +
-                '<span class="og-preview-badge">Foundation</span>' +
+                '<span class="og-preview-badge">基础功能</span>' +
             '</header>' +
             '<div class="og-workspace-content">' +
-                '<nav class="og-section-tabs" aria-label="' + escapeHtml(page.title) + ' sections">' +
+                '<nav class="og-section-tabs" aria-label="' + escapeHtml(page.title) + '栏目">' +
                     page.tabs.map(function (tab, index) {
                         return '<span class="og-section-tab' + (index === 0 ? ' active' : '') + '">' +
                             escapeHtml(tab) + '</span>';
                     }).join('') +
                 '</nav>' +
                 '<div class="og-foundation-grid">' +
-                    '<section class="og-foundation-card"><h2>Workspace foundation is ready</h2>' +
+                    '<section class="og-foundation-card"><h2>工作区基础功能已就绪</h2>' +
                     '<p>' + escapeHtml(page.description) + '</p>' +
                     '<div class="og-empty-visual" aria-hidden="true"><div class="og-empty-block"></div>' +
                     '<div class="og-empty-block"></div><div class="og-empty-block"></div></div></section>' +
-                    '<aside class="og-foundation-card"><h2>Coming in its focused PR</h2><ul class="og-foundation-list">' +
+                    '<aside class="og-foundation-card"><h2>后续建设内容</h2><ul class="og-foundation-list">' +
                     page.next.map(function (item) { return '<li>' + escapeHtml(item) + '</li>'; }).join('') +
                     '</ul></aside>' +
                     (page.code ? codeFoundation() : '') +

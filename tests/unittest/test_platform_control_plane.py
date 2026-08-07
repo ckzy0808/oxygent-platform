@@ -147,7 +147,9 @@ def test_routing_state_and_usage_summary_come_from_policy_and_invocations():
     assert control.usage_summary(profile) == {
         "inputTokens": 100,
         "outputTokens": 50,
-        "estimatedCost": 0.02,
+        "totalTokens": 150,
+        "exactInvocations": 1,
+        "estimatedInvocations": 0,
         "successRate": 1.0,
         "invocations": 1,
     }

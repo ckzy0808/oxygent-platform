@@ -79,7 +79,7 @@
     width: 100%;
     min-height: 68px;
     display: grid;
-    grid-template-columns: minmax(210px, 1.4fr) minmax(150px, 1fr) 100px minmax(140px, 1fr) 140px 100px;
+    grid-template-columns: minmax(210px, 1.4fr) minmax(150px, 1fr) 100px minmax(140px, 1fr) 140px;
     align-items: center;
     gap: 14px;
     padding: 12px 18px;
@@ -296,16 +296,28 @@ button.og-section-tab {
     gap: 12px;
 }
 
-.og-artifact-grid article {
+.og-artifact-card {
+    width: 100%;
     padding: 16px;
     border: 1px solid #dbe4ff;
     border-radius: 9px;
     background: linear-gradient(145deg, #f8faff, #fff);
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.og-artifact-card:hover,
+.og-artifact-card.selected {
+    border-color: #8098f9;
+    box-shadow: 0 8px 22px rgba(53, 56, 205, 0.1);
 }
 
 .og-artifact-grid h3 {
     margin: 9px 0 7px;
     font-size: 13px;
+    line-height: 1.55;
 }
 
 .og-artifact-grid p {
@@ -329,6 +341,82 @@ button.og-section-tab {
     margin-top: 14px;
     color: #667085;
     font-size: 10px;
+}
+
+.og-artifact-detail {
+    margin-bottom: 16px;
+}
+
+.og-artifact-detail .og-card-title {
+    align-items: flex-start;
+}
+
+.og-artifact-detail .og-card-title h2 {
+    margin: 8px 0 0;
+    max-width: 900px;
+    font-size: 18px;
+    line-height: 1.55;
+}
+
+.og-artifact-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px 0 22px;
+}
+
+.og-artifact-meta span,
+.og-artifact-findings span {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #f2f4f7;
+    color: #475467;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.og-artifact-section {
+    margin-top: 20px;
+}
+
+.og-artifact-section h3 {
+    margin: 0 0 10px;
+    color: #344054;
+    font-size: 13px;
+}
+
+.og-artifact-section ul {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding-left: 20px;
+    color: #475467;
+    line-height: 1.6;
+}
+
+.og-artifact-tasks,
+.og-artifact-findings {
+    display: grid;
+    gap: 10px;
+}
+
+.og-artifact-tasks article,
+.og-artifact-findings article {
+    padding: 12px 14px;
+    border: 1px solid #eaecf0;
+    border-radius: 8px;
+    background: #fcfcfd;
+}
+
+.og-artifact-tasks p,
+.og-artifact-findings p {
+    margin: 6px 0;
+    color: #475467;
+    line-height: 1.55;
+}
+
+.og-artifact-tasks small {
+    color: #667085;
 }
 
 .og-role-mark {
@@ -385,6 +473,69 @@ button.og-section-tab {
     background: #101828;
     color: #d0d5dd;
     font-size: 11px;
+}
+
+.og-workflow-cta {
+    margin-top: 20px;
+}
+
+.og-workflow-summary {
+    margin-top: 20px;
+}
+
+.og-workflow-summary .og-card-title a {
+    color: var(--og-accent, #5b63f6);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.og-workflow-launch .og-card-title {
+    align-items: flex-start;
+}
+
+.og-workflow-launch .og-card-title p {
+    color: #687086;
+    line-height: 1.6;
+    margin: 8px 0 0;
+    max-width: 760px;
+}
+
+.og-workflow-launch form,
+.og-workflow-launch label {
+    display: grid;
+    gap: 8px;
+}
+
+.og-workflow-launch form {
+    gap: 18px;
+    margin-top: 24px;
+}
+
+.og-workflow-launch label {
+    color: #30384d;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.og-workflow-launch input,
+.og-workflow-launch textarea {
+    background: #f8f9fc;
+    border: 1px solid #dfe3ed;
+    border-radius: 10px;
+    color: #20263a;
+    font: inherit;
+    font-weight: 400;
+    padding: 12px 14px;
+    resize: vertical;
+}
+
+.og-workflow-config-note {
+    background: #fff8e8;
+    border: 1px solid #f0d99c;
+    border-radius: 10px;
+    color: #755a19;
+    line-height: 1.6;
+    padding: 12px 14px;
 }
 
 .og-modal-backdrop {
@@ -466,6 +617,94 @@ button.og-section-tab {
     font-size: 11px;
 }
 
+.og-project-create-modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.og-project-create-modes button {
+    display: grid;
+    gap: 5px;
+    padding: 13px;
+    border: 1px solid #d0d5dd;
+    border-radius: 9px;
+    background: #fff;
+    color: #344054;
+    cursor: pointer;
+    text-align: left;
+}
+
+.og-project-create-modes button.active {
+    border-color: #5b63d3;
+    background: #f4f5ff;
+    box-shadow: 0 0 0 2px rgba(91, 99, 211, 0.12);
+}
+
+.og-project-create-modes b { font-size: 12px; }
+.og-project-create-modes span { color: #667085; font-size: 10px; line-height: 1.45; }
+
+.og-project-import-panel {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    border: 1px dashed #aeb4c7;
+    border-radius: 9px;
+    background: #f8f9fc;
+}
+
+.og-project-import-panel[hidden] { display: none; }
+.og-project-import-panel b { color: #20263a; font-size: 12px; }
+.og-project-import-panel p { margin: 4px 0 0; color: #667085; font-size: 10px; line-height: 1.5; }
+
+.og-project-notice {
+    margin-bottom: 14px;
+    padding: 11px 14px;
+    border: 1px solid #b9dfca;
+    border-radius: 9px;
+    background: #ecf9f1;
+    color: #276749;
+    font-size: 12px;
+}
+
+.og-source-analysis,
+.og-source-analysis-pending { margin-top: 16px; }
+
+.og-source-analysis-summary {
+    margin: 18px 0;
+    color: #344054;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.og-source-analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.og-source-analysis-grid > div {
+    padding: 12px 14px;
+    border: 1px solid #e4e7ec;
+    border-radius: 9px;
+    background: #f8f9fc;
+}
+
+.og-source-analysis-grid b { color: #344054; font-size: 11px; }
+.og-source-analysis-grid ul { margin: 8px 0 0; padding-left: 18px; color: #475467; font-size: 11px; line-height: 1.6; }
+
+.og-source-analysis-pending {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+}
+
+.og-source-analysis-pending h2 { margin: 8px 0 4px; }
+.og-source-analysis-pending p { margin: 0; color: #667085; line-height: 1.6; }
+
 .og-reference-filter {
     display: flex;
     align-items: flex-end;
@@ -525,7 +764,12 @@ button.og-section-tab {
 
     .og-metric-grid,
     .og-detail-grid,
-    .og-artifact-grid {
+    .og-artifact-grid,
+    .og-project-create-modes,
+    .og-source-analysis-grid {
         grid-template-columns: 1fr;
     }
+
+    .og-source-analysis-pending { align-items: flex-start; flex-direction: column; }
 }
+.og-code-stage-link { display: inline-flex; margin-top: 16px; text-decoration: none; }

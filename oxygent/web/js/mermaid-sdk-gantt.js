@@ -83,7 +83,7 @@ function renderGantt(nodesDatas, containerId) {
     $('#flowchart-container-gantt').html('').removeAttr('data-processed');
     const container = document.getElementById(containerId);
     if (transformData.length === 0) {
-        container.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">No completed nodes to display</p>';
+        container.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">暂无已完成节点</p>';
         return;
     }
     container.innerHTML = code;
@@ -147,7 +147,6 @@ function truncateSectionTitles(containerId) {
         txt.appendChild(titleEl);
     });
 }
-
 
 
 

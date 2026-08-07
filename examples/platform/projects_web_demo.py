@@ -1,4 +1,4 @@
-"""Run the Project/Artifact UI with local, credential-free demo data."""
+"""Run the Project UI, optionally backed by the real four-role model workflow."""
 
 import asyncio
 import os
@@ -22,6 +22,7 @@ from oxygent.platform import (
     ModelProfile,
     ModelRegistry,
     ModelUsage,
+    MasWorkflowExecutor,
     PlatformControlPlane,
     PlatformServices,
     ProjectCreate,
@@ -45,12 +46,70 @@ from oxygent.platform import (
     WorkflowEvent,
     WorkflowPhase,
     build_platform_router,
+    build_environment_workflow_bundle,
     default_role_definitions,
+    environment_workflow_enabled,
 )
 
 
 async def demo_response(_request):
-    return "The existing OxyGent Chat remains available beside Project Workspace."
+    return "OxyGent 原有对话能力与项目工作区均可正常使用。"
+
+
+def configure_default_model_fallback() -> None:
+    """Reuse the repository's default LLM for all roles when no role config exists.
+
+    Only credential references are copied.  The API key remains in its original
+    environment variable and is resolved at call time.
+    """
+    if environment_workflow_enabled():
+        return
+    required = (
+        "DEFAULT_LLM_API_KEY",
+        "DEFAULT_LLM_BASE_URL",
+        "DEFAULT_LLM_MODEL_NAME",
+    )
+    if not all(os.getenv(name, "").strip() for name in required):
+        return
+    os.environ.setdefault("OXYGENT_ENABLE_REAL_WORKFLOW", "1")
+    os.environ.setdefault("OXYGENT_SHARED_PROVIDER_ID", "default_openai_provider")
+    os.environ.setdefault(
+        "OXYGENT_SHARED_PROVIDER_TYPE",
+        os.getenv("DEFAULT_LLM_PROVIDER_TYPE", "openai-responses"),
+    )
+    os.environ.setdefault("OXYGENT_SHARED_BASE_URL", os.environ["DEFAULT_LLM_BASE_URL"])
+    os.environ.setdefault("OXYGENT_SHARED_MODEL", os.environ["DEFAULT_LLM_MODEL_NAME"])
+    os.environ.setdefault(
+        "OXYGENT_SHARED_CREDENTIAL_REFERENCE", "env:DEFAULT_LLM_API_KEY"
+    )
+    os.environ.setdefault("OXYGENT_REVIEWER_EXCLUDE_PRODUCER_PROVIDER", "0")
+
+
+def configured_repository_roots() -> dict[str, Path]:
+    """Return explicitly configured local Git repositories for Code Workspace.
+
+    The demo is useful out of the box with its own repository, while deployments
+    can replace that single source with an allow-listed path-separated list.  The
+    browser only receives the opaque references, never these filesystem paths.
+    """
+    if os.getenv("OXYGENT_DISABLE_CODE_WORKSPACE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return {}
+    configured = os.getenv("OXYGENT_CODE_REPOSITORIES", "").strip()
+    if configured:
+        return {
+            f"local-repository-{index}": Path(value).expanduser()
+            for index, value in enumerate(configured.split(os.pathsep), start=1)
+            if value.strip()
+        }
+    demo_repository = os.getenv("OXYGENT_DEMO_REPOSITORY", "").strip()
+    if demo_repository:
+        return {"demo-repository": Path(demo_repository).expanduser()}
+    return {"current-oxygent": Path(__file__).resolve().parents[2]}
 
 
 class DemoHealthAdapter:
@@ -75,7 +134,7 @@ def seed_workflow_timeline(
             "provider-a",
             "pm-model",
             EngineeringStatus.ANALYZING,
-            "Requirements and acceptance criteria are ready.",
+            "需求和验收标准已就绪。",
             ["artifact-read", "artifact-write"],
             {"id": "requirement-spec-001", "type": "RequirementSpec"},
             0.008,
@@ -88,7 +147,7 @@ def seed_workflow_timeline(
             "provider-b",
             "architect-model",
             EngineeringStatus.PLANNING,
-            "Architecture boundaries and decisions are documented.",
+            "架构边界和决策已记录。",
             ["artifact-read", "dependency-map"],
             {"id": "architecture-decision-001", "type": "ArchitectureDecision"},
             0.012,
@@ -101,7 +160,7 @@ def seed_workflow_timeline(
             "provider-c",
             "lead-model",
             EngineeringStatus.PLANNING,
-            "The implementation task graph and dependencies are ready.",
+            "实现任务图和依赖关系已就绪。",
             ["artifact-read", "task-graph"],
             {"id": "task-graph-001", "type": "TaskGraph"},
             0.016,
@@ -114,7 +173,7 @@ def seed_workflow_timeline(
             "provider-c",
             "lead-model",
             EngineeringStatus.IMPLEMENTING,
-            "Implementation scope was evaluated; code writing remains gated.",
+            "已评估实现范围，代码写入仍受门禁控制。",
             ["repository-read", "file-search"],
             None,
             0.014,
@@ -127,7 +186,7 @@ def seed_workflow_timeline(
             "provider-d",
             "reviewer-model",
             EngineeringStatus.TESTING,
-            "Configured checks completed with recorded exit codes.",
+            "已完成配置的检查并记录真实退出码。",
             ["verification-profile"],
             None,
             0.010,
@@ -140,7 +199,7 @@ def seed_workflow_timeline(
             "provider-d",
             "reviewer-model",
             EngineeringStatus.REVIEWING,
-            "Independent review completed without exposing private reasoning.",
+            "独立审查已完成，未暴露模型的私有推理过程。",
             ["artifact-read"],
             {"id": "review-report-001", "type": "ReviewReport"},
             0.020,
@@ -163,10 +222,10 @@ def seed_workflow_timeline(
         phase_started = started_at + timedelta(minutes=index * 4)
         start_payload = {
             "status": active_status.value,
-            "summary": f"{phase.value.title()} phase started.",
+            "summary": "阶段已开始。",
         }
         if index == 0:
-            start_payload["runName"] = "Platform workspace delivery"
+            start_payload["runName"] = "平台工作区交付"
         traces.append_workflow_event(
             WorkflowEvent(
                 eventId=f"workflow-{index}-started",
@@ -225,7 +284,7 @@ def seed_workflow_timeline(
             timestamp=started_at + timedelta(minutes=27),
             payload={
                 "status": EngineeringStatus.AWAITING_APPROVAL.value,
-                "summary": "Workflow is ready for explicit human approval.",
+                "summary": "工作流已准备好等待人工明确审批。",
             },
         )
     )
@@ -235,7 +294,7 @@ def build_control_plane(project_id: str) -> PlatformControlPlane:
     provider_specs = [
         (
             "provider-a",
-            "OpenAI-Compatible A",
+            "OpenAI 兼容服务 A",
             ProviderType.OPENAI_COMPATIBLE,
             "https://provider-a.invalid/v1",
         ),
@@ -253,7 +312,7 @@ def build_control_plane(project_id: str) -> PlatformControlPlane:
         ),
         (
             "provider-d",
-            "Independent Review D",
+            "独立审查服务 D",
             ProviderType.OPENAI_COMPATIBLE,
             "https://provider-d.invalid/v1",
         ),
@@ -274,28 +333,28 @@ def build_control_plane(project_id: str) -> PlatformControlPlane:
             "pm-model",
             "provider-a",
             "planner-v1",
-            "Atlas Planner",
+            "规划模型 A",
             {"text", "structured-output"},
         ),
         (
             "architect-model",
             "provider-b",
             "design-v1",
-            "Gemini Design",
+            "架构设计模型 B",
             {"text", "structured-output", "long-context"},
         ),
         (
             "lead-model",
             "provider-c",
             "code-v1",
-            "Local Code",
+            "本地代码模型 C",
             {"text", "structured-output", "code"},
         ),
         (
             "reviewer-model",
             "provider-d",
             "review-v1",
-            "Independent Review",
+            "独立审查模型 D",
             {"text", "structured-output", "review"},
         ),
     ]
@@ -343,22 +402,22 @@ def build_control_plane(project_id: str) -> PlatformControlPlane:
         [
             ToolPolicy(
                 id="planning-tools",
-                name="Planning tools",
+                name="产品规划工具",
                 allowedTools=["artifact-read", "artifact-write"],
             ),
             ToolPolicy(
                 id="architecture-tools",
-                name="Architecture tools",
+                name="架构设计工具",
                 allowedTools=["artifact-read", "dependency-map"],
             ),
             ToolPolicy(
                 id="lead-tools",
-                name="Technical planning tools",
+                name="技术规划工具",
                 allowedTools=["artifact-read", "task-graph"],
             ),
             ToolPolicy(
                 id="review-tools",
-                name="Independent review tools",
+                name="独立审查工具",
                 allowedTools=["artifact-read"],
                 deniedTools=["artifact-write"],
             ),
@@ -415,8 +474,7 @@ def build_control_plane(project_id: str) -> PlatformControlPlane:
                 selectedProviderId=provider_id,
                 selectedModelId=model_id,
                 selectionReason=(
-                    "Selected primary model by priority; required capabilities "
-                    "matched; Provider health is healthy."
+                    "按优先级选择主模型；所需能力匹配；服务商健康状态正常。"
                 ),
                 fallbackChain=[model_specs[(index + 1) % len(model_specs)][0]],
                 requiredCapabilities=["structured-output", "text"],
@@ -446,71 +504,83 @@ def build_control_plane(project_id: str) -> PlatformControlPlane:
 
 
 async def build_services() -> PlatformServices:
-    demo_repository = os.getenv("OXYGENT_DEMO_REPOSITORY")
+    repository_roots = configured_repository_roots()
+    primary_repository_reference = next(iter(repository_roots), None)
     services = (
         PlatformServices.with_code_workspace(
-            repository_roots={"demo-repository": Path(demo_repository)},
+            repository_roots=repository_roots,
             workspace_root=Path(
                 os.getenv("OXYGENT_CODE_WORKSPACE_ROOT", "/tmp/oxygent-code-worktrees")
             ),
-            verification_executables={sys.executable, "python", "python3"},
+            verification_executables={sys.executable, "git"},
         )
-        if demo_repository
+        if repository_roots
         else PlatformServices()
     )
     project = await services.create_project(
         ProjectCreate(
-            name="Agent Platform Workspace",
-            description="A generic workspace for structured multi-role collaboration.",
-            repository="Not linked",
+            name="智能体平台工作区",
+            description="用于结构化多角色协作的通用工作区。",
+            repository="未关联",
             team=[
-                "Product Manager",
-                "Solution Architect",
-                "Technical Lead",
-                "Reviewer",
+                "产品经理",
+                "解决方案架构师",
+                "技术负责人",
+                "审查员",
             ],
             settings={"monthlyBudget": 0.05},
         )
     )
-    requirement = services.artifacts.append(
-        RequirementSpec(
-            projectId=project.id,
-            taskId="demo-workflow-task",
-            producerRole="product_manager",
-            producerAgent="pm_agent",
-            providerId="provider-a",
-            modelId="model-a",
-            content=RequirementSpecContent(
-                summary="Keep role outputs structured and traceable",
-                requirements=[
-                    "Preserve the existing Chat experience",
-                    "Pass structured Artifacts between roles",
-                ],
-                acceptanceCriteria=[
-                    "Every task references its Project",
-                    "Artifact revisions never overwrite earlier versions",
-                ],
+    seed_demo_data = not environment_workflow_enabled() or os.getenv(
+        "OXYGENT_SEED_DEMO_DATA", ""
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    project_task = None
+    if seed_demo_data:
+        requirement = services.artifacts.append(
+            RequirementSpec(
+                projectId=project.id,
+                taskId="demo-workflow-task",
+                producerRole="product_manager",
+                producerAgent="pm_agent",
+                providerId="provider-a",
+                modelId="model-a",
+                content=RequirementSpecContent(
+                    summary="保持角色输出结构化且可追踪",
+                    requirements=[
+                        "保留现有对话体验",
+                        "在角色之间传递结构化产物",
+                    ],
+                    acceptanceCriteria=[
+                        "每个任务都引用所属项目",
+                        "产物修订不会覆盖早期版本",
+                    ],
+                ),
+            )
+        )
+        project_task = await services.create_task_from_chat(
+            project.id,
+            ProjectTaskFromChat(
+                title="审查项目工作区基础能力",
+                objective="验证项目隔离、产物来源和对话任务交接。",
+                sourceTraceId="demo-trace-reference",
+                attachmentReferences=["workspace_notes.md"],
+                sourceArtifactIds=[requirement.id],
             ),
         )
-    )
-    project_task = await services.create_task_from_chat(
-        project.id,
-        ProjectTaskFromChat(
-            title="Review the Project workspace foundation",
-            objective="Verify Project isolation, Artifact provenance, and Chat handoff.",
-            sourceTraceId="demo-trace-reference",
-            attachmentReferences=["workspace_notes.md"],
-            sourceArtifactIds=[requirement.id],
-        ),
-    )
-    if demo_repository and os.getenv("OXYGENT_DEMO_SEED_CODE_TASK") == "1":
-        metadata = await services.worktrees.inspect_repository("demo-repository")
+    if (
+        primary_repository_reference
+        and project_task is not None
+        and os.getenv("OXYGENT_DEMO_SEED_CODE_TASK") == "1"
+    ):
+        metadata = await services.worktrees.inspect_repository(
+            primary_repository_reference
+        )
         default_branch = metadata["defaultBranch"]
         repository = await services.register_repository(
             project.id,
             RepositoryRegistration(
-                name=Path(demo_repository).name,
-                rootReference="demo-repository",
+                name=repository_roots[primary_repository_reference].name,
+                rootReference=primary_repository_reference,
                 defaultBranch=default_branch,
                 allowedBaseBranches=[default_branch],
             ),
@@ -519,11 +589,11 @@ async def build_services() -> PlatformServices:
             project.id,
             VerificationProfileCreate(
                 repositoryId=repository.id,
-                name="Safe local checks",
+                name="安全的本地检查",
                 commands=[
                     VerificationCommand(
                         id="demo-unit-check",
-                        name="Repository smoke test",
+                        name="代码仓库冒烟测试",
                         slot=VerificationSlot.UNIT,
                         argv=[
                             sys.executable,
@@ -546,11 +616,11 @@ async def build_services() -> PlatformServices:
                 projectTaskId=project_task.id,
                 baseBranch=default_branch,
                 changeContract=ChangeContract(
-                    objective="Add repository isolation and bounded code inspection.",
+                    objective="增加代码仓库隔离和有边界的代码检查能力。",
                     acceptanceCriteria=[
-                        "The source working directory remains unchanged",
-                        "Repository reads stay inside the task worktree",
-                        "Scope limits are enforced by server code",
+                        "源工作目录保持不变",
+                        "代码仓库读取操作限制在任务 Worktree 内",
+                        "范围限制由服务器代码强制执行",
                     ],
                     allowedPaths=["oxygent/**", "tests/**", "docs/**", "examples/**"],
                     forbiddenPaths=[".env*", "**/*.key", "**/*.pem"],
@@ -579,7 +649,7 @@ async def build_services() -> PlatformServices:
                     code_task.id,
                     ApprovalActionRequest(
                         actorId="demo-human-reviewer",
-                        reason="Approved in the credential-free local demo.",
+                        reason="已在无凭证的本地演示中批准。",
                     ),
                 )
     services.control_plane = build_control_plane(project.id)
@@ -587,20 +657,41 @@ async def build_services() -> PlatformServices:
 
 
 async def main() -> None:
+    configure_default_model_fallback()
     services = await build_services()
+    port = int(os.getenv("OXYGENT_PROJECT_DEMO_PORT", "18080"))
+    services.aider_proxy_base_url = (
+        f"http://127.0.0.1:{port}/api/v1/platform/aider-proxy/v1"
+    )
     llm = oxy.MockLLM(name="projects_demo_llm", func_mock_process=demo_response)
     agent = oxy.ChatAgent(
         name="projects_demo_agent",
         llm_model="projects_demo_llm",
         is_master=True,
     )
-    port = int(os.getenv("OXYGENT_PROJECT_DEMO_PORT", "18080"))
-    async with MAS(name="projects_web_demo", oxy_space=[llm, agent]) as mas:
+    workflow_bundle = None
+    oxy_space = [llm, agent]
+    if environment_workflow_enabled():
+        workflow_bundle = build_environment_workflow_bundle(
+            artifact_store=services.artifacts,
+            workflow_is_master=False,
+        )
+        services.control_plane = workflow_bundle.control_plane
+        oxy_space.extend(workflow_bundle.oxy_space)
+    async with MAS(
+        name="projects_web_demo",
+        oxy_space=oxy_space,
+        func_record_model_usage=services.record_mas_model_usage,
+    ) as mas:
+        if workflow_bundle is not None:
+            services.workflow_executor = MasWorkflowExecutor(
+                mas, workflow_bundle.workflow_name
+            )
         await mas.start_web_service(
             host="127.0.0.1",
             port=port,
             routers=[build_platform_router(services)],
-            welcome_message="Project Workspace demo is ready.",
+            welcome_message="项目工作区演示已就绪。",
         )
 
 

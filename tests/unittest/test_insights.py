@@ -76,6 +76,18 @@ def test_usage_totals_track_cost_coverage_reliability_and_fallback():
     assert totals.p95_latency_ms == 250
 
 
+def test_running_usage_is_not_counted_as_failure_or_success_rate_sample():
+    totals = aggregate_usage(
+        [usage(), usage(status=InvocationStatus.RUNNING, cost_available=False)]
+    )
+
+    assert totals.invocations == 2
+    assert totals.running == 1
+    assert totals.succeeded == 1
+    assert totals.failed == 0
+    assert totals.success_rate == 1.0
+
+
 def test_filters_use_inclusive_start_and_exclusive_end():
     records = [
         usage(created_at=NOW - timedelta(days=1)),

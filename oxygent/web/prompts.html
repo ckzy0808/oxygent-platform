@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prompt Manager - OxyGent</title>
+    <title>提示词管理 - OxyGent</title>
     <link rel="shortcut icon" href="./image/group-favicon.png" type="image/x-icon">
     <link rel="stylesheet" href="./css/prompt-manager.css">
     <link rel="stylesheet" href="./css/guide.css">
@@ -15,26 +15,26 @@
     <div class="node-header">
         <div class="node-header-left">
             <img class="node-header-logo" src="./image/group-favicon.png" alt="">
-            <span class="node-header-title">Prompt Manager</span>
+            <span class="node-header-title">提示词管理</span>
         </div>
         <div class="node-header-center">
             <div class="search-box">
                 <span class="search-icon">🔍</span>
-                <input type="text" id="searchInput" placeholder="Search prompts..." onkeyup="handleSearch(event)">
+                <input type="text" id="searchInput" placeholder="搜索提示词…" onkeyup="handleSearch(event)">
             </div>
         </div>
         <div class="node-header-right">
-            <button class="node-header-btn" onclick="loadPrompts()" title="Refresh all prompts">
+            <button class="node-header-btn" onclick="loadPrompts()" title="刷新全部提示词">
                 <img src="./image/refresh.svg" alt=""/>
-                <span>Refresh</span>
+                <span>刷新</span>
             </button>
-            <button class="node-header-btn" onclick="startGuideTour()" title="Feature Guide">
+            <button class="node-header-btn" onclick="startGuideTour()" title="功能引导">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="7"/><path d="M6 6a2 2 0 1 1 2.5 1.9c-.5.3-.5.6-.5 1.1"/><circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="none"/></svg>
-                <span>Guide</span>
+                <span>引导</span>
             </button>
             <button class="node-header-btn" onclick="window.open('index.html', '_self')">
                 <img src="./image/arrow-left.svg" alt=""/>
-                Back
+                返回
             </button>
         </div>
     </div>
@@ -50,24 +50,24 @@
     <div id="edit-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Edit Prompt</h2>
+                <h2>编辑提示词</h2>
                 <button class="close" onclick="hideEditModal()">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="edit-form">
                     <div class="form-group">
-                        <label for="edit_prompt_key">Prompt Key</label>
+                        <label for="edit_prompt_key">提示词键</label>
                         <input type="text" id="edit_prompt_key" class="form-control" readonly>
                     </div>
                     <div class="form-group">
-                        <label for="edit_prompt_content">Prompt Content</label>
+                        <label for="edit_prompt_content">提示词内容</label>
                         <textarea id="edit_prompt_content" class="form-control" required></textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="hideEditModal()">Cancel</button>
-                <button type="button" id="save-prompt-btn" class="btn btn-primary" onclick="savePrompt()" disabled>Save Changes <span class="btn-badge"></span></button>
+                <button type="button" class="btn btn-secondary" onclick="hideEditModal()">取消</button>
+                <button type="button" id="save-prompt-btn" class="btn btn-primary" onclick="savePrompt()" disabled>保存更改 <span class="btn-badge"></span></button>
             </div>
         </div>
     </div>
@@ -76,7 +76,7 @@
     <div id="preview-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Version Preview</h2>
+                <h2>版本预览</h2>
                 <button class="close" onclick="hidePreviewModal()">&times;</button>
             </div>
             <div class="modal-body">
@@ -89,10 +89,10 @@
                 </div>
                 <div class="preview-content-container">
                     <div class="preview-content-header">
-                        <h3>Content</h3>
+                        <h3>内容</h3>
                         <div class="preview-actions">
-                            <button class="btn btn-sm btn-secondary" onclick="copyPreviewContent()">Copy</button>
-                            <button class="btn btn-sm btn-primary" onclick="togglePreviewMode()">View Mode</button>
+                            <button class="btn btn-sm btn-secondary" onclick="copyPreviewContent()">复制</button>
+                            <button class="btn btn-sm btn-primary" onclick="togglePreviewMode()">切换视图</button>
                         </div>
                     </div>
                     <div class="preview-content" id="preview-content">
@@ -101,9 +101,9 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="hidePreviewModal()">Close</button>
+                <button type="button" class="btn btn-secondary" onclick="hidePreviewModal()">关闭</button>
                 <button type="button" class="btn btn-warning" id="preview-rollback-btn">
-                    Rollback to this version <span class="btn-badge"></span>
+                    回滚到此版本 <span class="btn-badge"></span>
                 </button>
             </div>
         </div>
@@ -113,7 +113,7 @@
     <div id="history-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Version History</h2>
+                <h2>版本历史</h2>
                 <button class="close" onclick="hideHistoryModal()">&times;</button>
             </div>
             <div class="modal-body">
@@ -122,7 +122,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="hideHistoryModal()">Close</button>
+                <button type="button" class="btn btn-secondary" onclick="hideHistoryModal()">关闭</button>
             </div>
         </div>
     </div>
@@ -131,16 +131,16 @@
     <div id="rollback-modal" class="modal">
         <div class="modal-content" style="max-width: 500px; height: auto; margin-top: 15vh;">
             <div class="modal-header">
-                <h2>Confirm Rollback</h2>
+                <h2>确认回滚</h2>
                 <button class="close" onclick="hideRollbackModal()">&times;</button>
             </div>
             <div class="modal-body">
                 <p id="rollback-message" style="margin-bottom: 20px; line-height: 1.6;"></p>
-                <p style="color: #666; font-size: 14px;">This will create a new version with the content from the selected version.</p>
+                <p style="color: #666; font-size: 14px;">系统会使用所选版本的内容创建一个新版本。</p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="hideRollbackModal()">Cancel</button>
-                <button type="button" class="btn btn-warning" id="confirm-rollback-btn">Confirm <span class="btn-badge"></span></button>
+                <button type="button" class="btn btn-secondary" onclick="hideRollbackModal()">取消</button>
+                <button type="button" class="btn btn-warning" id="confirm-rollback-btn">确认 <span class="btn-badge"></span></button>
             </div>
         </div>
     </div>
@@ -149,22 +149,22 @@
     <div id="optimize-modal" class="modal">
         <div class="modal-content" style="max-width: 900px; max-height: 90vh; margin-top: 5vh; display: flex; flex-direction: column;">
             <div class="modal-header">
-                <h2>✨ Optimize Prompt</h2>
+                <h2>✨ 优化提示词</h2>
                 <button class="close" onclick="hideOptimizeModal()">&times;</button>
             </div>
             <div class="modal-body" style="overflow-y: auto; flex: 1;">
                 <!-- Prompt Info -->
                 <div class="form-group">
-                    <label>Prompt Key</label>
+                    <label>提示词键</label>
                     <input type="text" id="optimize_prompt_key" class="form-control" readonly>
                 </div>
 
                 <!-- Agent Type -->
                 <div class="form-group">
-                    <label for="optimize_agent_type">Agent Type</label>
+                    <label for="optimize_agent_type">智能体类型</label>
                     <select id="optimize_agent_type" class="form-control">
-                        <option value="general">General</option>
-                        <option value="react">ReAct Agent</option>
+                        <option value="general">通用</option>
+                        <option value="react">ReAct 智能体</option>
                     </select>
                     <small style="color: #666; display: block; margin-top: 5px;">
                         <span id="agent_type_source">-</span>
@@ -173,39 +173,39 @@
 
                 <!-- Optimization Strategy -->
                 <div class="form-group">
-                    <label for="optimize_strategy">Optimization Strategy</label>
+                    <label for="optimize_strategy">优化策略</label>
                     <select id="optimize_strategy" class="form-control">
-                        <option value="comprehensive">Comprehensive (Recommended)</option>
-                        <option value="clarity">Improve Clarity</option>
-                        <option value="structure">Improve Structure</option>
-                        <option value="completeness">Improve Completeness</option>
-                        <option value="effectiveness">Improve Effectiveness</option>
+                        <option value="comprehensive">全面优化（推荐）</option>
+                        <option value="clarity">提升清晰度</option>
+                        <option value="structure">改进结构</option>
+                        <option value="completeness">提高完整性</option>
+                        <option value="effectiveness">增强有效性</option>
                     </select>
                 </div>
 
                 <!-- Custom Requirements -->
                 <div class="form-group">
-                    <label for="optimize_requirements">Custom Requirements (Optional)</label>
+                    <label for="optimize_requirements">自定义要求（可选）</label>
                     <textarea id="optimize_requirements" class="form-control" rows="3"
-                        placeholder="E.g., Make it more concise, add examples for edge cases, focus on error handling..."></textarea>
+                        placeholder="例如：表述更简洁、补充边界情况示例、重点关注错误处理…"></textarea>
                 </div>
 
                 <!-- Optimization Results (Hidden by default) -->
                 <div id="optimize-results" style="display: none; margin-top: 20px;">
                     <div style="border-top: 2px solid #e0e0e0; padding-top: 20px;">
-                        <h3 style="margin-bottom: 15px;">📊 Analysis & Optimization Results</h3>
+                        <h3 style="margin-bottom: 15px;">📊 分析与优化结果</h3>
 
                         <!-- Top Row: Analysis and Improvements -->
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                             <!-- Analysis -->
                             <div class="form-group" style="margin-bottom: 0;">
-                                <label>🔍 Analysis</label>
+                                <label>🔍 分析</label>
                                 <div id="optimize-analysis" style="background: #f5f5f5; padding: 15px; border-radius: 5px; line-height: 1.6;"></div>
                             </div>
 
                             <!-- Improvements -->
                             <div class="form-group" style="margin-bottom: 0;">
-                                <label>✨ Improvements</label>
+                                <label>✨ 改进项</label>
                                 <ul id="optimize-improvements" style="background: #e8f5e9; padding: 15px 15px 15px 40px; border-radius: 5px; margin: 0;"></ul>
                             </div>
                         </div>
@@ -214,30 +214,30 @@
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                             <!-- Rationale -->
                             <div class="form-group" style="margin-bottom: 0;">
-                                <label>💡 Rationale</label>
+                                <label>💡 优化理由</label>
                                 <div id="optimize-rationale" style="background: #fff3e0; padding: 15px; border-radius: 5px; line-height: 1.6;"></div>
                             </div>
 
                             <!-- Validation -->
                             <div class="form-group" style="margin-bottom: 0;">
-                                <label>✅ Validation</label>
+                                <label>✅ 校验</label>
                                 <div id="optimize-validation" style="padding: 10px; border-radius: 5px;"></div>
                             </div>
                         </div>
 
                         <!-- Comparison View -->
                         <div style="margin-top: 20px;">
-                            <h4 style="margin-bottom: 10px;">📝 Comparison</h4>
+                            <h4 style="margin-bottom: 10px;">📝 对比</h4>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                                 <!-- Original -->
                                 <div>
-                                    <label>Original Prompt</label>
+                                    <label>原始提示词</label>
                                     <textarea id="optimize-original" class="form-control" rows="10" readonly
                                         style="background: #f9f9f9; font-size: 12px;"></textarea>
                                 </div>
                                 <!-- Optimized -->
                                 <div>
-                                    <label>Optimized Prompt</label>
+                                    <label>优化后的提示词</label>
                                     <textarea id="optimize-optimized" class="form-control" rows="10"
                                         style="background: #e8f5e9; font-size: 12px;"></textarea>
                                 </div>
@@ -247,12 +247,12 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="hideOptimizeModal()">Cancel</button>
+                <button type="button" class="btn btn-secondary" onclick="hideOptimizeModal()">取消</button>
                 <button type="button" class="btn btn-info" id="preview-optimize-btn" onclick="previewOptimization()">
-                    👁️ Preview Optimization <span class="btn-badge"></span>
+                    👁️ 预览优化 <span class="btn-badge"></span>
                 </button>
                 <button type="button" class="btn btn-success" id="apply-optimize-btn" onclick="applyOptimization()" style="display: none;">
-                    ✅ Apply Optimization <span class="btn-badge"></span>
+                    ✅ 应用优化 <span class="btn-badge"></span>
                 </button>
             </div>
         </div>
@@ -268,8 +268,8 @@
             <div class="tour-tooltip-step">
                 <span class="tour-tooltip-counter" id="tour-counter"></span>
                 <div class="tour-tooltip-nav">
-                    <button class="tour-tooltip-btn" id="tour-skip-btn" onclick="endGuideTour()">Skip</button>
-                    <button class="tour-tooltip-btn primary" id="tour-next-btn" onclick="nextGuideTourStep()">Next</button>
+                    <button class="tour-tooltip-btn" id="tour-skip-btn" onclick="endGuideTour()">跳过</button>
+                    <button class="tour-tooltip-btn primary" id="tour-next-btn" onclick="nextGuideTourStep()">下一步</button>
                 </div>
             </div>
         </div>
@@ -285,36 +285,36 @@
         {
             selector: '.search-box',
             icon: '\u{1F50D}',
-            title: 'Search Prompts',
-            desc: 'Filter prompts by prompt_key, content, agent_type, or description. Matches in real-time as you type (debounced 300ms).',
+            title: '搜索提示词',
+            desc: '按 prompt_key、内容、agent_type 或描述筛选。输入时会实时匹配（300 毫秒防抖）。',
             tooltipPos: 'below'
         },
         {
             selector: '.node-header-right',
             icon: '\u{1F504}',
-            title: 'Toolbar',
-            desc: 'Refresh re-fetches all prompts from /api/prompts/. Guide opens this walkthrough. Back returns to the main OxyGent page.',
+            title: '工具栏',
+            desc: '“刷新”会从 /api/prompts/ 重新获取全部提示词；“引导”打开本说明；“返回”回到 OxyGent 主页面。',
             tooltipPos: 'below'
         },
         {
             selector: '.prompt-card',
             icon: '\u{1F4C4}',
-            title: 'Prompt Card',
-            desc: 'Displays prompt_key, agent_type badge, version number, and a content preview (300 chars). Click the content area to open the edit modal where you can modify and save changes.',
+            title: '提示词卡片',
+            desc: '显示 prompt_key、agent_type 标记、版本号和内容预览（300 字符）。点击内容区域可打开编辑窗口并保存更改。',
             tooltipPos: 'below'
         },
         {
             selector: '.badge-version-btn',
             icon: '\u{1F4D6}',
-            title: 'Version History',
-            desc: 'Click the version badge to view all saved versions. You can preview any version\'s full content, copy it, or rollback — rollback creates a new version with the old content.',
+            title: '版本历史',
+            desc: '点击版本标记查看全部已保存版本。可预览、复制或回滚；回滚会使用旧内容创建新版本。',
             tooltipPos: 'below'
         },
         {
             selector: '.optimize-btn',
             icon: '\u{2728}',
-            title: 'Optimize Prompt',
-            desc: 'Opens AI-powered optimization. Choose a strategy (comprehensive, clarity, structure, completeness, effectiveness), add custom requirements, then preview the optimized result and apply it.',
+            title: '优化提示词',
+            desc: '打开 AI 优化功能。选择优化策略并添加自定义要求，然后预览并应用优化结果。',
             tooltipPos: 'above'
         }
     ];
@@ -404,7 +404,7 @@
             document.getElementById('tour-desc').textContent = step.desc;
             document.getElementById('tour-counter').textContent = (index + 1) + ' / ' + _guideTourSteps.length;
             var nextBtn = document.getElementById('tour-next-btn');
-            nextBtn.textContent = (index === _guideTourSteps.length - 1) ? 'Finish' : 'Next';
+            nextBtn.textContent = (index === _guideTourSteps.length - 1) ? '完成' : '下一步';
         }
 
         if (firstShow) {

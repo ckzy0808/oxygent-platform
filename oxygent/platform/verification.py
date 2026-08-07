@@ -46,6 +46,73 @@ class VerificationStatus(str, Enum):
     TIMED_OUT = "timedOut"
 
 
+class VerificationFailureCategory(str, Enum):
+    CODE = "code"
+    INFRASTRUCTURE = "infrastructure"
+
+
+_INFRASTRUCTURE_FAILURE_PATTERNS = (
+    "could not transfer artifact",
+    "could not resolve dependencies",
+    "failed to collect dependencies",
+    "premature end of content-length",
+    "connection reset",
+    "connection refused",
+    "network is unreachable",
+    "temporary failure in name resolution",
+    "name or service not known",
+    "could not resolve host",
+    "econnreset",
+    "econnrefused",
+    "enotfound",
+    "eai_again",
+    "network timeout",
+    "unable to access",
+    "command not found",
+    "no such file or directory",
+)
+_ANSI_CONTROL_SEQUENCE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def sanitize_verification_output(value: str) -> str:
+    """Remove terminal rendering codes while preserving actionable build text."""
+
+    value = _ANSI_CONTROL_SEQUENCE.sub("", value).replace("\r", "\n")
+    return "".join(
+        character
+        for character in value
+        if character in {"\n", "\t"} or ord(character) >= 32
+    )
+
+
+def verification_output_preview(value: str, limit: int) -> str:
+    """Keep command startup context and the error-heavy tail of long output."""
+
+    if len(value) <= limit:
+        return value
+    head_size = min(8_000, limit // 4)
+    marker = "\n... 中间输出已省略，保留末尾错误信息 ...\n"
+    tail_size = max(0, limit - head_size - len(marker))
+    return value[:head_size] + marker + value[-tail_size:]
+
+
+def classify_verification_failure(
+    *,
+    status: VerificationStatus,
+    stdout: str = "",
+    stderr: str = "",
+    failure_reason: str = "",
+) -> VerificationFailureCategory | None:
+    """Separate host/dependency failures from source-code failures."""
+
+    if status is VerificationStatus.PASSED:
+        return None
+    text = "\n".join((stdout, stderr, failure_reason)).lower()
+    if any(pattern in text for pattern in _INFRASTRUCTURE_FAILURE_PATTERNS):
+        return VerificationFailureCategory.INFRASTRUCTURE
+    return VerificationFailureCategory.CODE
+
+
 _ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{0,79}$")
 _SHELL_EXECUTABLES = {
     "bash",
@@ -156,6 +223,9 @@ class VerificationRun(PlatformModel):
     stderr_artifact_id: str | None = None
     output_truncated: bool = False
     failure_reason: str | None = None
+    failure_category: VerificationFailureCategory | None = None
+    attempt_count: int = Field(default=1, ge=1, le=10)
+    automatic_retry_reason: str | None = None
     changed_files: list[str] = Field(default_factory=list)
     diff_line_count: int = Field(default=0, ge=0)
     content_hash: str = Field(min_length=64, max_length=64)
@@ -419,14 +489,18 @@ class VerificationRunner:
             projectId=project_id,
             taskId=task_id,
             stream="stdout",
-            content=stdout.decode("utf-8", errors="replace"),
+            content=sanitize_verification_output(
+                stdout.decode("utf-8", errors="replace")
+            ),
             truncated=stdout_truncated,
         )
         stderr_output = VerificationOutput(
             projectId=project_id,
             taskId=task_id,
             stream="stderr",
-            content=stderr.decode("utf-8", errors="replace"),
+            content=sanitize_verification_output(
+                stderr.decode("utf-8", errors="replace")
+            ),
             truncated=stderr_truncated,
         )
         status = (
@@ -449,8 +523,12 @@ class VerificationRunner:
             status=status,
             exitCode=process.returncode,
             durationMs=duration_ms,
-            stdoutPreview=stdout_output.content[: self.preview_bytes],
-            stderrPreview=stderr_output.content[: self.preview_bytes],
+            stdoutPreview=verification_output_preview(
+                stdout_output.content, self.preview_bytes
+            ),
+            stderrPreview=verification_output_preview(
+                stderr_output.content, self.preview_bytes
+            ),
             stdoutArtifactId=stdout_output.id,
             stderrArtifactId=stderr_output.id,
             outputTruncated=stdout_truncated or stderr_truncated,
@@ -460,6 +538,18 @@ class VerificationRunner:
                 else "Verification command exited non-zero"
                 if process.returncode
                 else None
+            ),
+            failureCategory=classify_verification_failure(
+                status=status,
+                stdout=stdout_output.content,
+                stderr=stderr_output.content,
+                failure_reason=(
+                    "Verification command timed out"
+                    if timed_out
+                    else "Verification command exited non-zero"
+                    if process.returncode
+                    else ""
+                ),
             ),
             changedFiles=diff.changed_files,
             diffLineCount=diff.diff_line_count,

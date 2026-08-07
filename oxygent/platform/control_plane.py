@@ -175,12 +175,21 @@ class PlatformControlPlane:
         succeeded = sum(
             record.status is InvocationStatus.SUCCEEDED for record in records
         )
+        terminal = sum(
+            record.status is not InvocationStatus.RUNNING for record in records
+        )
         return {
             "inputTokens": sum(record.input_tokens for record in records),
             "outputTokens": sum(record.output_tokens for record in records),
-            "estimatedCost": sum(
-                record.estimated_cost for record in records if record.cost_available
+            "totalTokens": sum(
+                record.input_tokens + record.output_tokens for record in records
             ),
-            "successRate": succeeded / len(records) if records else None,
+            "exactInvocations": sum(
+                record.token_count_method.value == "exact" for record in records
+            ),
+            "estimatedInvocations": sum(
+                record.token_count_method.value != "exact" for record in records
+            ),
+            "successRate": succeeded / terminal if terminal else None,
             "invocations": len(records),
         }

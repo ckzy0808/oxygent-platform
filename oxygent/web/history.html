@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="utf-8">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <link rel="shortcut icon" href="./image/group-favicon.png" type="image/x-icon">
-    <title>History - OxyGent</title>
+    <title>历史记录 - OxyGent</title>
     <link rel="stylesheet" href="./css/history.css"/>
     <link rel="stylesheet" href="./css/guide.css"/>
     <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
@@ -15,31 +15,31 @@
 <div class="node-header">
     <div class="node-header-left">
         <img class="node-header-logo" src="./image/group-favicon.png" alt="">
-        <span class="node-header-title">History Manager</span>
+        <span class="node-header-title">历史记录管理</span>
     </div>
     <div class="node-header-center">
         <div class="search-bar">
             <div class="search-box">
                 <span class="search-icon">🔍</span>
-                <input type="text" id="searchInput" placeholder="Search conversations..." onkeypress="handleSearchKeyPress(event)" oninput="toggleClearButton()">
-                <button class="search-clear-btn" id="clearSearchBtn" onclick="clearSearch()" style="display: none;" title="Clear">✕</button>
+                <input type="text" id="searchInput" placeholder="搜索对话…" onkeypress="handleSearchKeyPress(event)" oninput="toggleClearButton()">
+                <button class="search-clear-btn" id="clearSearchBtn" onclick="clearSearch()" style="display: none;" title="清除">✕</button>
             </div>
             <select id="ratingFilter" onchange="filterConversations()" class="filter-select">
-                <option value="all">All</option>
-                <option value="liked">Liked 👍</option>
-                <option value="disliked">Disliked 👎</option>
-                <option value="unrated">Unrated</option>
+                <option value="all">全部</option>
+                <option value="liked">已赞 👍</option>
+                <option value="disliked">已踩 👎</option>
+                <option value="unrated">未评价</option>
             </select>
         </div>
     </div>
     <div class="node-header-right">
-        <button class="node-header-btn" onclick="startGuideTour()" title="Feature Guide">
+        <button class="node-header-btn" onclick="startGuideTour()" title="功能引导">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="7"/><path d="M6 6a2 2 0 1 1 2.5 1.9c-.5.3-.5.6-.5 1.1"/><circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="none"/></svg>
-            <span>Guide</span>
+            <span>引导</span>
         </button>
         <button class="node-header-btn" onclick="window.open('index.html', '_self')">
             <img src="./image/arrow-left.svg" alt=""/>
-            Back
+            返回
         </button>
     </div>
 </div>
@@ -90,11 +90,11 @@
                     renderConversationGroups(filteredConversationGroups);
                     renderPagination();
                 } else {
-                    showError("Failed to load conversations: " + (response.message || "Unknown error"));
+                    showError("加载对话失败：" + (response.message || "未知错误"));
                 }
             },
             error: function(xhr, status, error) {
-                showError("Network error occurred: " + error);
+                showError("发生网络错误：" + error);
             }
         });
     }
@@ -106,8 +106,8 @@
         if (conversationGroups.length === 0) {
             listDiv.append(`
                 <div class="empty-state">
-                    <img src="./image/empty.svg" alt="No conversations">
-                    <p>No conversations found</p>
+                    <img src="./image/empty.svg" alt="暂无对话">
+                    <p>未找到对话</p>
                 </div>
             `);
             return;
@@ -155,7 +155,7 @@
 
             // Get first conversation as main display
             var firstConv = group.conversations[0];
-            var input = firstConv.input || "No query";
+            var input = firstConv.input || "无问题内容";
             try {
                 var parsedInput = JSON.parse(input);
                 if (parsedInput.query) {
@@ -175,10 +175,10 @@
                     <div class="group-header">
                         <div class="conv-title">
                             <span class="conv-icon">🤖</span>
-                            <span class="conv-callee">${escapeHtml(firstConv.callee || 'Agent')}</span>
+                            <span class="conv-callee">${escapeHtml(firstConv.callee || '智能体')}</span>
                             ${groupRatingIndicator}
                             ${groupRatingStatsDisplay}
-                            <span class="conversation-count-badge">${conversationCount} conversation${conversationCount > 1 ? 's' : ''}</span>
+                            <span class="conversation-count-badge">${conversationCount} 条对话</span>
                         </div>
                         <div class="conv-actions">
                             <span class="conv-time">${createTime}</span>
@@ -189,7 +189,7 @@
                     </div>
                     <div class="group-summary" onclick="toggleGroup('${group.group_id}')">
                         <div class="conv-query">
-                            <strong>Initial Query:</strong> ${escapeHtml(displayInput)}
+                            <strong>初始问题：</strong> ${escapeHtml(displayInput)}
                         </div>
                     </div>
                     <div class="group-conversations" id="group-${group.group_id}" style="display:none;">
@@ -197,7 +197,7 @@
 
             // Create entries for each conversation in the group
             group.conversations.forEach(function(conv, index) {
-                var convInput = conv.input || "No query";
+                var convInput = conv.input || "无问题内容";
                 try {
                     var parsedConvInput = JSON.parse(convInput);
                     if (parsedConvInput.query) {
@@ -246,7 +246,7 @@
                     var hasComments = conv.rating_history.some(r => r.comment || r.erp);
                     if (hasComments) {
                         commentsHtml = '<div class="conv-comments" style="margin-top:8px;padding:8px;background:#f9fafb;border-radius:4px;border-left:3px solid #3b82f6;">';
-                        commentsHtml += '<div style="font-size:11px;font-weight:600;color:#1f2937;margin-bottom:6px;">💬 User Feedback:</div>';
+                        commentsHtml += '<div style="font-size:11px;font-weight:600;color:#1f2937;margin-bottom:6px;">💬 用户反馈：</div>';
 
                         conv.rating_history.forEach(function(rating) {
                             if (rating.comment || rating.erp) {
@@ -283,13 +283,13 @@
                         </div>
                         <div class="conv-body-small" onclick="event.stopPropagation(); openConversation('${conv.trace_id}')">
                             <div class="conv-query-small">
-                                <strong>Query:</strong> ${escapeHtml(displayConvInput)}
+                                <strong>问题：</strong> ${escapeHtml(displayConvInput)}
                             </div>
-                            ${displayConvOutput ? `<div class="conv-output-small"><strong>Output:</strong> ${escapeHtml(displayConvOutput)}</div>` : ''}
+                            ${displayConvOutput ? `<div class="conv-output-small"><strong>输出：</strong> ${escapeHtml(displayConvOutput)}</div>` : ''}
                             ${commentsHtml}
                         </div>
                         <div class="conv-footer-small">
-                            <span class="trace-id-small">Trace ID: ${conv.trace_id}</span>
+                            <span class="trace-id-small">追踪 ID：${conv.trace_id}</span>
                             <button class="btn-view-small" onclick="event.stopPropagation(); openConversation('${conv.trace_id}')">
                                 View Details →
                             </button>
@@ -325,7 +325,7 @@
         console.log('Rendering rating details for:', traceId, 'with', ratings.length, 'ratings');
         
         var detailsHtml = '<div style="font-size:13px;color:#374151;line-height:1.6;">';
-        detailsHtml += `<div style="font-weight:600;margin-bottom:8px;color:#111827;">💬 Rating Records (${ratings.length} items)</div>`;
+        detailsHtml += `<div style="font-weight:600;margin-bottom:8px;color:#111827;">💬 评价记录（${ratings.length} 条）</div>`;
         
         ratings.forEach(function(rating, index) {
             detailsHtml += '<div style="margin-bottom:10px;padding:8px;background:#fff;border-radius:4px;border:1px solid #e5e7eb;">';
@@ -337,12 +337,12 @@
             
             // Comment content
             if (rating.comment) {
-                detailsHtml += `<div style="margin-bottom:4px;"><strong style="color:#6b7280;">Comment:</strong> ${escapeHtml(rating.comment)}</div>`;
+                detailsHtml += `<div style="margin-bottom:4px;"><strong style="color:#6b7280;">评论：</strong> ${escapeHtml(rating.comment)}</div>`;
             }
             
             // ERP information
             if (rating.erp) {
-                detailsHtml += `<div><strong style="color:#6b7280;">ERP:</strong> ${escapeHtml(rating.erp)}</div>`;
+                detailsHtml += `<div><strong style="color:#6b7280;">ERP：</strong> ${escapeHtml(rating.erp)}</div>`;
             }
             
             detailsHtml += '</div>';
@@ -366,9 +366,9 @@
         
         // Previous button
         if (currentPage > 1) {
-            html += `<button class="page-btn" onclick="goToPage(${currentPage - 1})">← Previous</button>`;
+            html += `<button class="page-btn" onclick="goToPage(${currentPage - 1})">← 上一页</button>`;
         } else {
-            html += `<button class="page-btn" disabled>← Previous</button>`;
+            html += `<button class="page-btn" disabled>← 上一页</button>`;
         }
         
         // Page numbers
@@ -401,13 +401,13 @@
         
         // Next button
         if (currentPage < totalPages) {
-            html += `<button class="page-btn" onclick="goToPage(${currentPage + 1})">Next →</button>`;
+            html += `<button class="page-btn" onclick="goToPage(${currentPage + 1})">下一页 →</button>`;
         } else {
-            html += `<button class="page-btn" disabled>Next →</button>`;
+            html += `<button class="page-btn" disabled>下一页 →</button>`;
         }
         
         html += '</div>';
-        html += `<div class="page-info">Page ${currentPage} of ${totalPages}</div>`;
+        html += `<div class="page-info">第 ${currentPage} / ${totalPages} 页</div>`;
         
         paginationDiv.html(html);
     }
@@ -473,7 +473,7 @@
     }
     
     function formatDate(dateString) {
-        if (!dateString) return "N/A";
+        if (!dateString) return "暂无";
         
         try {
             var date = new Date(dateString);
@@ -485,15 +485,15 @@
             var days = Math.floor(hours / 24);
             
             if (days > 7) {
-                return date.toLocaleDateString();
+                return date.toLocaleDateString('zh-CN');
             } else if (days > 0) {
-                return days + " day" + (days > 1 ? "s" : "") + " ago";
+                return days + " 天前";
             } else if (hours > 0) {
-                return hours + " hour" + (hours > 1 ? "s" : "") + " ago";
+                return hours + " 小时前";
             } else if (minutes > 0) {
-                return minutes + " minute" + (minutes > 1 ? "s" : "") + " ago";
+                return minutes + " 分钟前";
             } else {
-                return "Just now";
+                return "刚刚";
             }
         } catch (e) {
             return dateString;
@@ -532,8 +532,8 @@
         <div class="tour-tooltip-step">
             <span class="tour-tooltip-counter" id="tour-counter"></span>
             <div class="tour-tooltip-nav">
-                <button class="tour-tooltip-btn" id="tour-skip-btn" onclick="endGuideTour()">Skip</button>
-                <button class="tour-tooltip-btn primary" id="tour-next-btn" onclick="nextGuideTourStep()">Next</button>
+                <button class="tour-tooltip-btn" id="tour-skip-btn" onclick="endGuideTour()">跳过</button>
+                <button class="tour-tooltip-btn primary" id="tour-next-btn" onclick="nextGuideTourStep()">下一步</button>
             </div>
         </div>
     </div>
@@ -549,36 +549,36 @@ var _guideTourSteps = [
     {
         selector: '.search-box',
         icon: '\u{1F50D}',
-        title: 'Search Conversations',
-        desc: 'Enter a keyword and press Enter to search server-side. The backend filters conversations by content match. Click the × button to clear and reload all results.',
+        title: '搜索对话',
+        desc: '输入关键词并按回车在服务器端搜索。后端会按内容匹配筛选，点击 × 可清除条件并重新加载全部结果。',
         tooltipPos: 'below'
     },
     {
         selector: '.filter-select',
         icon: '\u{1F3AF}',
-        title: 'Rating Filter',
-        desc: 'Filter by user feedback status: Liked (👍), Disliked (👎), or Unrated. Switching resets to page 1 and clears any search term.',
+        title: '评价筛选',
+        desc: '按用户反馈状态筛选：已赞（👍）、已踩（👎）或未评价。切换后会返回第 1 页并清空搜索词。',
         tooltipPos: 'below'
     },
     {
         selector: '.conversation-group',
         icon: '\u{1F4AC}',
-        title: 'Conversation Group',
-        desc: 'Groups conversations by session (group_id). Shows the callee agent name, aggregated 👍/👎 counts, conversation count, and the initial query. Color-coded border indicates overall rating.',
+        title: '对话分组',
+        desc: '按会话（group_id）对对话分组，并显示被调用智能体、赞踩汇总、对话数和初始问题。边框颜色表示总体评价。',
         tooltipPos: 'below'
     },
     {
         selector: '.btn-toggle-group',
         icon: '\u{1F4C2}',
-        title: 'Expand / Collapse',
-        desc: 'Expand to see each individual conversation turn: numbered entries with their own query, output preview, per-turn ratings, user feedback comments, and trace_id. Click "View Details" to open in Node Explorer.',
+        title: '展开 / 收起',
+        desc: '展开后可查看各轮对话的问题、输出预览、评价、用户反馈和 trace_id。点击“查看详情”可在节点浏览器中打开。',
         tooltipPos: 'left'
     },
     {
         selector: '.pagination',
         icon: '\u{1F4D1}',
-        title: 'Pagination',
-        desc: 'Server-side pagination — 20 groups per page. Navigate between pages; the view scrolls to top automatically on page change.',
+        title: '分页',
+        desc: '服务器端分页，每页 20 组。切换页面后视图会自动滚动到顶部。',
         tooltipPos: 'above'
     }
 ];
@@ -688,7 +688,7 @@ function _positionGuideTour(index, step, targetEl) {
         document.getElementById('tour-desc').textContent = step.desc;
         document.getElementById('tour-counter').textContent = (index + 1) + ' / ' + _guideTourSteps.length;
         var nextBtn = document.getElementById('tour-next-btn');
-        nextBtn.textContent = (index === _guideTourSteps.length - 1) ? 'Finish' : 'Next';
+        nextBtn.textContent = (index === _guideTourSteps.length - 1) ? '完成' : '下一步';
     }
 
     if (firstShow) {

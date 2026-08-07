@@ -20,6 +20,65 @@ from oxygent.platform import (
     VerificationSlot,
     VerificationStatus,
 )
+from oxygent.platform.verification import (
+    VerificationFailureCategory,
+    classify_verification_failure,
+    sanitize_verification_output,
+    verification_output_preview,
+)
+
+
+def test_verification_failure_classifier_separates_dependency_network_errors():
+    category = classify_verification_failure(
+        status=VerificationStatus.FAILED,
+        stderr=(
+            "Could not transfer artifact org.ow2.asm:asm:jar:9.8: "
+            "Premature end of Content-Length delimited message body"
+        ),
+    )
+
+    assert category is VerificationFailureCategory.INFRASTRUCTURE
+
+
+def test_verification_failure_classifier_keeps_test_assertions_actionable():
+    category = classify_verification_failure(
+        status=VerificationStatus.FAILED,
+        stdout="AssertionError: expected 2 but got 1",
+    )
+
+    assert category is VerificationFailureCategory.CODE
+
+
+def test_auto_maven_command_uses_bounded_transport_retry(monkeypatch, tmp_path):
+    from oxygent.platform.services import PlatformServices
+
+    (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
+    monkeypatch.setattr(
+        "oxygent.platform.services._verification_executable",
+        lambda name: "/opt/toolchain/bin/mvn" if name == "mvn" else None,
+    )
+
+    command = next(
+        item
+        for item in PlatformServices._code_stage_verification_commands(tmp_path)
+        if item.id.startswith("maven-build-")
+    )
+
+    assert "--batch-mode" in command.argv
+    assert "--no-transfer-progress" in command.argv
+    assert "-Dmaven.wagon.http.retryHandler.count=3" in command.argv
+
+
+def test_verification_output_removes_ansi_and_keeps_error_tail():
+    cleaned = sanitize_verification_output(
+        "\x1b[2K\rtransforming...\x1b[31mfailed\x1b[0m\n"
+    )
+    preview = verification_output_preview("start\n" + "x" * 100 + "\nERROR line 23", 60)
+
+    assert "\x1b" not in cleaned
+    assert "transforming...failed" in cleaned.replace("\n", "")
+    assert preview.startswith("start")
+    assert preview.endswith("ERROR line 23")
 
 
 def git(root: Path, *args: str) -> str:

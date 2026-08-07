@@ -1,6 +1,7 @@
 """Test token metering functionality."""
 
 from unittest.mock import MagicMock
+from types import SimpleNamespace
 
 import pytest
 
@@ -425,6 +426,36 @@ class TestAfterExecute:
         assert isinstance(resp.extra["usage"], dict)
         assert resp.extra["usage"]["total_tokens"] == 15
         assert req.shared_data["_metrics"]["token_usage"]["total_tokens"] == 15
+
+    @pytest.mark.asyncio
+    async def test_notifies_per_call_usage_observer_before_serialization(self):
+        from oxygent.oxy.llms.base_llm import BaseLLM
+
+        observed = []
+
+        async def observer(llm, request, usage):
+            observed.append((llm, request, usage))
+
+        req = MagicMock(shared_data={})
+        req.mas = SimpleNamespace(func_record_model_usage=observer)
+        token_usage = TokenUsage(
+            input_tokens=23,
+            output_tokens=7,
+            model_name="gpt-observed",
+            estimation_method=EstimationMethod.EXACT,
+        )
+        resp = OxyResponse(
+            state=OxyState.COMPLETED,
+            output="hello",
+            extra={"usage": token_usage},
+        )
+        resp.oxy_request = req
+        llm = BaseLLM.__new__(BaseLLM)
+
+        await llm._after_execute(resp)
+
+        assert observed == [(llm, req, token_usage)]
+        assert resp.extra["usage"]["estimation_method"] == "exact"
 
 
 # ---------------------------------------------------------------------------

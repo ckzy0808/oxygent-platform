@@ -2,13 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import re
 from datetime import datetime
 from ipaddress import ip_address
 from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import Field
 
 from oxygent.schemas import WebResponse
@@ -27,6 +39,12 @@ from .coding import (
     RepositoryRegistration,
     ScopeViolation,
 )
+from .code_stage import (
+    CodeStageApprovalRequest,
+    CodeStageReviewOverrideRequest,
+    CodeStageRunRequest,
+    SourceWorkspaceCreate,
+)
 from .control_plane import (
     PlatformControlPlane,
     ProviderCreate,
@@ -38,14 +56,16 @@ from .insights import (
     InsightsQuery,
     aggregate_usage,
     breakdown_usage,
-    build_budget_snapshots,
     filter_usage,
 )
 from .projects import ProjectCreate, ProjectTaskFromChat, ProjectUpdate
+from .provider_adapters import ProviderCallError
 from .registries import RegistryError
 from .services import PlatformServices
 from .tracing import EngineeringStatus
+from .usage import InvocationStatus
 from .verification import VerificationProfileCreate
+from .workflow_runtime import WorkflowLaunchRequest
 
 
 class ArtifactRevisionRequest(PlatformModel):
@@ -60,6 +80,10 @@ class ArtifactRevisionRequest(PlatformModel):
 class VerificationRunRequest(PlatformModel):
     profile_id: str = Field(min_length=1, max_length=160)
     command_id: str = Field(min_length=1, max_length=160)
+
+
+class CodePreviewRequest(PlatformModel):
+    instructions: str = Field(default="", max_length=4000)
 
 
 def _dump(value: Any) -> dict[str, Any]:
@@ -103,7 +127,7 @@ def _require_code_access(request: Request, services: PlatformServices) -> None:
 def _code_workspace_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ScopeViolation):
         return HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         )
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
@@ -147,7 +171,6 @@ def _safe_route_reason(reason: str) -> str:
 
 _WORKFLOW_PAYLOAD_FIELDS = {
     "artifact",
-    "cost",
     "durationMs",
     "exitCode",
     "message",
@@ -156,6 +179,9 @@ _WORKFLOW_PAYLOAD_FIELDS = {
     "summary",
     "toolName",
     "toolsUsed",
+    "inputTokens",
+    "outputTokens",
+    "tokenCountMethod",
 }
 
 
@@ -181,11 +207,17 @@ def _safe_workflow_payload(payload: dict[str, Any]) -> dict[str, Any]:
         }:
             safe[key] = value
         elif (
-            key in {"cost", "durationMs"}
+            key in {"durationMs", "inputTokens", "outputTokens"}
             and isinstance(value, (int, float))
             and not isinstance(value, bool)
         ):
             safe[key] = max(0, value)
+        elif key == "tokenCountMethod" and value in {
+            "exact",
+            "tiktoken",
+            "approximate",
+        }:
+            safe[key] = value
         elif (
             key == "exitCode" and isinstance(value, int) and not isinstance(value, bool)
         ):
@@ -319,6 +351,71 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
     """Build a router bound to an explicit, caller-owned service container."""
     router = APIRouter(prefix="/api/v1/platform", tags=["platform"])
 
+    @router.post("/aider-proxy/v1/chat/completions")
+    async def aider_chat_completions(request: Request) -> dict[str, Any]:
+        """Loopback-only protocol bridge used by the local Aider subprocess."""
+        _require_code_access(request, services)
+        try:
+            payload = await request.json()
+            messages = payload.get("messages")
+            if not isinstance(messages, list) or not messages:
+                raise ValueError("Aider request requires messages")
+            return await services.complete_aider_proxy(messages, payload)
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        except ProviderCallError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"configured model provider rejected the Aider request: {type(exc).__name__}",
+            ) from exc
+
+    @router.post("/aider-proxy/runs/{run_id}/v1/chat/completions")
+    async def contextual_aider_chat_completions(
+        run_id: str, request: Request
+    ) -> dict[str, Any]:
+        """Aider bridge that attributes every provider request to its code run."""
+        _require_code_access(request, services)
+        try:
+            payload = await request.json()
+            messages = payload.get("messages")
+            if not isinstance(messages, list) or not messages:
+                raise ValueError("Aider request requires messages")
+            project_id = ""
+            task_id = run_id
+            try:
+                code_run = await services.code_stage_runs.get(run_id)
+                project_id = code_run.project_id
+                task_id = code_run.task_id
+            except KeyError:
+                try:
+                    code_task = await services.code_tasks.get(run_id)
+                    project_id = code_task.project_id
+                    task_id = code_task.id
+                except KeyError:
+                    pass
+            return await services.complete_aider_proxy(
+                messages,
+                payload,
+                project_id=project_id,
+                task_id=task_id,
+                run_id=run_id,
+            )
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        except ProviderCallError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"configured model provider rejected the Aider request: {type(exc).__name__}",
+            ) from exc
+
     @router.get("/capabilities")
     async def capabilities() -> dict[str, Any]:
         control = services.control_plane
@@ -327,6 +424,10 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
                 "projects": True,
                 "artifacts": True,
                 "chatToProjectTask": True,
+                "simpleCodeStage": True,
+                "codeStageQualityLifecycle": True,
+                "projectFolderImport": True,
+                "projectSourceAnalysis": control.configured,
                 "codeWorkspace": services.code_workspace_configured,
                 "gitWorktrees": services.code_workspace_configured,
                 "diffVerification": services.code_workspace_configured,
@@ -334,6 +435,7 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
                 "agents": True,
                 "models": True,
                 "workflowTimeline": True,
+                "workflowExecution": services.workflow_execution_configured,
                 "insights": True,
                 "executionDrawer": True,
                 "controlPlaneConfigured": control.configured,
@@ -478,9 +580,17 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
         return _response(items=items)
 
     @router.get("/usage")
-    async def list_usage() -> dict[str, Any]:
+    async def list_usage(
+        project_id: str | None = Query(default=None, alias="projectId"),
+        run_id: str | None = Query(default=None, alias="runId"),
+    ) -> dict[str, Any]:
         records = sorted(
-            services.control_plane.usage.list(),
+            (
+                record
+                for record in services.control_plane.usage.list()
+                if (project_id is None or record.project_id == project_id)
+                and (run_id is None or record.run_id == run_id)
+            ),
             key=lambda item: item.created_at,
             reverse=True,
         )
@@ -496,12 +606,17 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
             summary={
                 "inputTokens": sum(record.input_tokens for record in records),
                 "outputTokens": sum(record.output_tokens for record in records),
-                "estimatedCost": sum(
-                    record.estimated_cost for record in records if record.cost_available
+                "totalTokens": sum(
+                    record.input_tokens + record.output_tokens for record in records
                 ),
-                "pricedInvocations": sum(record.cost_available for record in records),
-                "unpricedInvocations": sum(
-                    not record.cost_available for record in records
+                "exactInvocations": sum(
+                    record.token_count_method.value == "exact" for record in records
+                ),
+                "estimatedInvocations": sum(
+                    record.token_count_method.value != "exact" for record in records
+                ),
+                "activeInvocations": sum(
+                    record.status is InvocationStatus.RUNNING for record in records
                 ),
                 "invocations": len(records),
             },
@@ -562,19 +677,8 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
             date_from=date_from,
             date_to=date_to,
         )
-        projects = await services.projects.list()
-        if query.project_id:
-            projects = [
-                project for project in projects if project.id == query.project_id
-            ]
         return _response(
             totals=_dump(aggregate_usage(records)),
-            budgets=[
-                _dump(snapshot)
-                for snapshot in build_budget_snapshots(
-                    projects, services.control_plane.usage.list()
-                )
-            ],
             range={
                 "dateFrom": query.date_from.isoformat() if query.date_from else None,
                 "dateTo": query.date_to.isoformat() if query.date_to else None,
@@ -720,6 +824,47 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
             items=[_workflow_event_view(control, event) for event in events]
         )
 
+    @router.get("/workflows/runs/{run_id}/stream")
+    async def stream_workflow_events(run_id: str) -> StreamingResponse:
+        control = services.control_plane
+        if not control.traces.workflow_events(run_id=run_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workflow run not found",
+            )
+
+        async def event_stream():
+            delivered: set[str] = set()
+            idle_ticks = 0
+            while True:
+                events = control.traces.workflow_events(run_id=run_id)
+                fresh = [event for event in events if event.event_id not in delivered]
+                for event in fresh:
+                    delivered.add(event.event_id)
+                    safe_event = _workflow_event_view(control, event)
+                    yield "data: " + json.dumps(safe_event, ensure_ascii=False) + "\n\n"
+                terminal = any(
+                    event.event_type
+                    in {
+                        "workflow.completed",
+                        "workflow.failed",
+                        "workflow.awaitingImplementation",
+                    }
+                    for event in events
+                )
+                if terminal and not fresh:
+                    break
+                idle_ticks += 1
+                if idle_ticks % 40 == 0:
+                    yield ": keep-alive\n\n"
+                await asyncio.sleep(0.25)
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     @router.get("/projects")
     async def list_projects() -> dict[str, Any]:
         projects = await services.projects.list()
@@ -729,6 +874,29 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
     async def create_project(payload: ProjectCreate) -> dict[str, Any]:
         project = await services.create_project(payload)
         return _response(project=_dump(project))
+
+    @router.post(
+        "/projects/{project_id}/workflows/runs",
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+    async def start_project_workflow(
+        project_id: str, payload: WorkflowLaunchRequest
+    ) -> dict[str, Any]:
+        try:
+            run_id = await services.start_role_workflow(project_id, payload)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+            ) from exc
+        runs = services.control_plane.traces.workflow_runs(project_id=project_id)
+        run = next(item for item in runs if item.run_id == run_id)
+        return _response(run=_workflow_run_view(services.control_plane, run))
 
     @router.get("/projects/{project_id}")
     async def get_project(project_id: str) -> dict[str, Any]:
@@ -848,6 +1016,349 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
         _require_code_access(request, services)
         items = services.worktrees.sources() if services.worktrees else []
         return _response(items=[_dump(item) for item in items])
+
+    @router.get("/projects/{project_id}/source-workspaces")
+    async def list_source_workspaces(
+        project_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            await services.projects.get(project_id)
+            items = await services.source_workspaces.list(project_id)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        return _response(items=[_dump(item) for item in items])
+
+    @router.get("/projects/{project_id}/source-analyses")
+    async def list_source_analyses(project_id: str, request: Request) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            await services.projects.get(project_id)
+            items = await services.source_analyses.list(project_id)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        return _response(items=[_dump(item) for item in items])
+
+    @router.post(
+        "/projects/{project_id}/source-workspaces/{source_workspace_id}/analyze",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def analyze_source_workspace(
+        project_id: str,
+        source_workspace_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            analysis = await services.analyze_source_workspace(
+                project_id, source_workspace_id
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        except ProviderCallError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+            ) from exc
+        return _response(analysis=_dump(analysis))
+
+    @router.post(
+        "/projects/{project_id}/source-workspaces/blank",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def create_blank_source_workspace(
+        project_id: str,
+        payload: SourceWorkspaceCreate,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            workspace = await services.import_source_workspace(
+                project_id, payload.name, []
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(sourceWorkspace=_dump(workspace))
+
+    @router.post(
+        "/projects/{project_id}/source-workspaces/import",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def import_source_workspace(
+        project_id: str,
+        request: Request,
+        files: list[UploadFile] = File(...),
+        paths_json: str = Form(default="[]", alias="pathsJson"),
+        name: str = Form(default="上传的项目"),
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            parsed_paths = json.loads(paths_json)
+            if not isinstance(parsed_paths, list) or len(parsed_paths) != len(files):
+                raise ValueError("uploaded file paths do not match the selected files")
+            if len(files) > services.source_workspace_manager.max_files:
+                raise ValueError("too many files were selected")
+            imported: list[tuple[str, bytes]] = []
+            for index, upload in enumerate(files):
+                path = str(parsed_paths[index] or upload.filename or "")
+                imported.append((path, await upload.read()))
+            workspace = await services.import_source_workspace(
+                project_id, name.strip() or "上传的项目", imported
+            )
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="uploaded file path metadata is invalid",
+            ) from exc
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        finally:
+            for upload in files:
+                await upload.close()
+        return _response(sourceWorkspace=_dump(workspace))
+
+    @router.get("/projects/{project_id}/code-stage-runs")
+    async def list_code_stage_runs(project_id: str, request: Request) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            await services.projects.get(project_id)
+            items = await services.code_stage_runs.list(project_id)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        return _response(items=[_dump(item) for item in items])
+
+    @router.post(
+        "/projects/{project_id}/code-stage-runs",
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+    async def start_code_stage_run(
+        project_id: str,
+        payload: CodeStageRunRequest,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            run = await services.start_code_stage(project_id, payload)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(run=_dump(run))
+
+    @router.get("/projects/{project_id}/code-stage-runs/{run_id}")
+    async def get_code_stage_run(
+        project_id: str, run_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            run = await services.code_stage_runs.get(run_id)
+            if run.project_id != project_id:
+                raise KeyError(f"code stage run not found: {run_id}")
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        return _response(run=_dump(run))
+
+    @router.get("/projects/{project_id}/code-stage-runs/{run_id}/changes")
+    async def get_code_stage_changes(
+        project_id: str, run_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            changes = await services.get_code_stage_changes(project_id, run_id)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except CodeWorkspaceError as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(changes=_dump(changes))
+
+    @router.get(
+        "/projects/{project_id}/code-stage-runs/{run_id}/changes/{file_path:path}"
+    )
+    async def get_code_stage_file_change(
+        project_id: str,
+        run_id: str,
+        file_path: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            change = await services.get_code_stage_file_change(
+                project_id, run_id, file_path
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except CodeWorkspaceError as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(change=change)
+
+    @router.get("/projects/{project_id}/code-stage-runs/{run_id}/lifecycle")
+    async def get_code_stage_lifecycle(
+        project_id: str, run_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            verification, command_runs = await services.get_code_stage_verification(
+                project_id, run_id
+            )
+            review = await services.get_code_stage_review(project_id, run_id)
+            approval = await services.get_code_stage_approval(project_id, run_id)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        return _response(
+            verification=_dump(verification) if verification else None,
+            verificationRuns=[_dump(item) for item in command_runs],
+            review=_dump(review) if review else None,
+            approval=_dump(approval) if approval else None,
+        )
+
+    @router.post(
+        "/projects/{project_id}/code-stage-runs/{run_id}/verify",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def verify_code_stage(
+        project_id: str, run_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            verification, command_runs = await services.run_code_stage_verification(
+                project_id, run_id
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError, ScopeViolation) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(
+            verification=_dump(verification),
+            verificationRuns=[_dump(item) for item in command_runs],
+        )
+
+    @router.post(
+        "/projects/{project_id}/code-stage-runs/{run_id}/review",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def review_code_stage(
+        project_id: str, run_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            review = await services.review_code_stage(project_id, run_id)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError, ScopeViolation) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(review=_dump(review))
+
+    @router.post(
+        "/projects/{project_id}/code-stage-runs/{run_id}/approve",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def approve_code_stage(
+        project_id: str,
+        run_id: str,
+        payload: CodeStageApprovalRequest,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            approval = await services.approve_code_stage(project_id, run_id, payload)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError, ScopeViolation) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(approval=_dump(approval))
+
+    @router.post(
+        "/projects/{project_id}/code-stage-runs/{run_id}/review-override",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def override_code_stage_review(
+        project_id: str,
+        run_id: str,
+        payload: CodeStageReviewOverrideRequest,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            review = await services.override_code_stage_review(
+                project_id, run_id, payload
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError, ScopeViolation) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(review=_dump(review))
+
+    @router.post(
+        "/projects/{project_id}/code-stage-runs/{run_id}/review-revision",
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+    async def start_code_stage_review_revision(
+        project_id: str, run_id: str, request: Request
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            revision = await services.start_code_stage_review_revision(
+                project_id, run_id
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError, ScopeViolation) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(run=_dump(revision))
+
+    @router.get(
+        "/projects/{project_id}/code-stage-runs/{run_id}/files/{file_path:path}"
+    )
+    async def download_code_stage_file(
+        project_id: str, run_id: str, file_path: str, request: Request
+    ) -> Response:
+        _require_code_access(request, services)
+        try:
+            run = await services.code_stage_runs.get(run_id)
+            if run.project_id != project_id:
+                raise KeyError(f"code stage run not found: {run_id}")
+            content = services.source_workspace_manager.read_output_file(run, file_path)
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except CodeWorkspaceError as exc:
+            raise _code_workspace_error(exc) from exc
+        filename = file_path.rsplit("/", 1)[-1]
+        return Response(
+            content=content,
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{quote(filename)}"'
+            },
+        )
+
+    @router.get("/projects/{project_id}/code-stage-runs/{run_id}/download")
+    async def download_code_stage_result(
+        project_id: str, run_id: str, request: Request
+    ) -> FileResponse:
+        _require_code_access(request, services)
+        try:
+            run = await services.code_stage_runs.get(run_id)
+            if run.project_id != project_id:
+                raise KeyError(f"code stage run not found: {run_id}")
+            archive = await asyncio.to_thread(
+                services.source_workspace_manager.build_archive,
+                run,
+                services.source_workspace_manager.root / "archives",
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except CodeWorkspaceError as exc:
+            raise _code_workspace_error(exc) from exc
+        return FileResponse(
+            archive,
+            media_type="application/zip",
+            filename=f"{run.id}-project.zip",
+        )
 
     @router.get("/code/repositories")
     async def list_code_repositories(
@@ -1012,6 +1523,24 @@ def build_platform_router(services: PlatformServices) -> APIRouter:
         except CodeWorkspaceError as exc:
             raise _code_workspace_error(exc) from exc
         return _response(diff=_dump(snapshot))
+
+    @router.post("/projects/{project_id}/code-tasks/{task_id}/code-preview")
+    async def generate_code_preview(
+        project_id: str,
+        task_id: str,
+        payload: CodePreviewRequest,
+        request: Request,
+    ) -> dict[str, Any]:
+        _require_code_access(request, services)
+        try:
+            preview = await services.run_aider_implementation(
+                project_id, task_id, payload.instructions
+            )
+        except KeyError as exc:
+            raise _not_found(exc) from exc
+        except (ValueError, CodeWorkspaceError) as exc:
+            raise _code_workspace_error(exc) from exc
+        return _response(preview=preview)
 
     @router.get("/projects/{project_id}/verification-profiles")
     async def list_verification_profiles(

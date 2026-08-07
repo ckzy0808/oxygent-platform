@@ -1,4 +1,4 @@
-"""Deterministic, credential-safe usage and cost aggregation."""
+"""Deterministic, credential-safe token usage aggregation."""
 
 from __future__ import annotations
 
@@ -54,20 +54,25 @@ class InsightsQuery(PlatformModel):
 
 class InsightTotals(PlatformModel):
     invocations: int = Field(default=0, ge=0)
+    running: int = Field(default=0, ge=0)
     succeeded: int = Field(default=0, ge=0)
     failed: int = Field(default=0, ge=0)
     fallback_invocations: int = Field(default=0, ge=0)
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
     total_tokens: int = Field(default=0, ge=0)
-    estimated_cost: float = Field(default=0.0, ge=0)
-    priced_invocations: int = Field(default=0, ge=0)
-    unpriced_invocations: int = Field(default=0, ge=0)
+    exact_invocations: int = Field(default=0, ge=0)
+    estimated_invocations: int = Field(default=0, ge=0)
+    # Retained only for backward-compatible internal budget helpers. Product API
+    # serialization excludes dollar estimates in favor of token metering.
+    estimated_cost: float = Field(default=0.0, ge=0, exclude=True)
+    priced_invocations: int = Field(default=0, ge=0, exclude=True)
+    unpriced_invocations: int = Field(default=0, ge=0, exclude=True)
     average_latency_ms: float = Field(default=0.0, ge=0)
     p95_latency_ms: float = Field(default=0.0, ge=0)
     success_rate: float | None = Field(default=None, ge=0, le=1)
     fallback_rate: float | None = Field(default=None, ge=0, le=1)
-    cost_coverage: float | None = Field(default=None, ge=0, le=1)
+    cost_coverage: float | None = Field(default=None, ge=0, le=1, exclude=True)
 
 
 class InsightBreakdownRow(PlatformModel):
@@ -121,18 +126,24 @@ def aggregate_usage(records: Iterable[ModelUsage]) -> InsightTotals:
     values = list(records)
     invocations = len(values)
     succeeded = sum(item.status is InvocationStatus.SUCCEEDED for item in values)
+    failed = sum(item.status is InvocationStatus.FAILED for item in values)
+    running = sum(item.status is InvocationStatus.RUNNING for item in values)
     fallback = sum(item.fallback_used for item in values)
+    exact = sum(item.token_count_method.value == "exact" for item in values)
     priced = [item for item in values if item.cost_available]
     latencies = sorted(item.latency_ms for item in values)
     p95_index = max(0, math.ceil(len(latencies) * 0.95) - 1)
     return InsightTotals(
         invocations=invocations,
+        running=running,
         succeeded=succeeded,
-        failed=invocations - succeeded,
+        failed=failed,
         fallbackInvocations=fallback,
         inputTokens=sum(item.input_tokens for item in values),
         outputTokens=sum(item.output_tokens for item in values),
         totalTokens=sum(item.input_tokens + item.output_tokens for item in values),
+        exactInvocations=exact,
+        estimatedInvocations=invocations - exact,
         estimatedCost=sum(item.estimated_cost for item in priced),
         pricedInvocations=len(priced),
         unpricedInvocations=invocations - len(priced),
@@ -140,7 +151,7 @@ def aggregate_usage(records: Iterable[ModelUsage]) -> InsightTotals:
             sum(item.latency_ms for item in values) / invocations if invocations else 0
         ),
         p95LatencyMs=latencies[p95_index] if latencies else 0,
-        successRate=succeeded / invocations if invocations else None,
+        successRate=(succeeded / (succeeded + failed) if succeeded + failed else None),
         fallbackRate=fallback / invocations if invocations else None,
         costCoverage=len(priced) / invocations if invocations else None,
     )
@@ -166,7 +177,7 @@ def breakdown_usage(
     return sorted(
         rows,
         key=lambda row: (
-            -row.totals.estimated_cost,
+            -row.totals.total_tokens,
             -row.totals.invocations,
             row.label.lower(),
         ),

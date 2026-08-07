@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import time
 from typing import Any, ClassVar
 
-from pydantic import Field
+from pydantic import BaseModel, Field, ValidationError
 
 from oxygent.oxy.base_flow import BaseFlow
 from oxygent.schemas import OxyRequest, OxyResponse, OxyState
@@ -43,13 +45,27 @@ class BasicRoleWorkflow(BaseFlow):
         "product_manager": WorkflowPhase.REQUIREMENT,
         "solution_architect": WorkflowPhase.ARCHITECTURE,
         "technical_lead": WorkflowPhase.PLAN,
-        "reviewer": WorkflowPhase.REVIEW,
+        # This Reviewer evaluates the TaskGraph before implementation. Final code
+        # review remains a later engineering phase and must not be marked complete.
+        "reviewer": WorkflowPhase.PLAN,
     }
     ACTIVE_STATUSES: ClassVar[dict[str, EngineeringStatus]] = {
         "product_manager": EngineeringStatus.ANALYZING,
         "solution_architect": EngineeringStatus.PLANNING,
         "technical_lead": EngineeringStatus.PLANNING,
         "reviewer": EngineeringStatus.REVIEWING,
+    }
+    CONTENT_MODELS: ClassVar[dict[str, type[BaseModel]]] = {
+        "product_manager": RequirementSpecContent,
+        "solution_architect": ArchitectureDecisionContent,
+        "technical_lead": TaskGraphContent,
+        "reviewer": ReviewReportContent,
+    }
+    CONTENT_NAMES: ClassVar[dict[str, str]] = {
+        "product_manager": "RequirementSpec",
+        "solution_architect": "ArchitectureDecision",
+        "technical_lead": "TaskGraph",
+        "reviewer": "ReviewReport",
     }
 
     agent_profiles: dict[str, AgentProfile]
@@ -146,6 +162,7 @@ class BasicRoleWorkflow(BaseFlow):
                 },
             )
         )
+        started = time.perf_counter()
         try:
             response = await oxy_request.call(
                 callee=profile.agent_name,
@@ -208,6 +225,17 @@ class BasicRoleWorkflow(BaseFlow):
                 model_id=response.extra.get("model_id"),
             )
         )
+        duration_ms = (time.perf_counter() - started) * 1000
+        usage = response.extra.get("usage")
+        if isinstance(usage, dict):
+            input_tokens = int(usage.get("input_tokens", 0) or 0)
+            output_tokens = int(usage.get("output_tokens", 0) or 0)
+            token_count_method = str(usage.get("estimation_method", "exact"))
+        else:
+            input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+            method = getattr(usage, "estimation_method", "exact") or "exact"
+            token_count_method = str(getattr(method, "value", method))
         self._append_workflow_event(
             WorkflowEvent(
                 eventId=generate_uuid(),
@@ -229,12 +257,120 @@ class BasicRoleWorkflow(BaseFlow):
                     "summary": f"{profile.name} completed the {phase.value} phase."
                     if response.state is OxyState.COMPLETED
                     else f"{profile.name} failed the {phase.value} phase.",
+                    "durationMs": duration_ms,
+                    "inputTokens": input_tokens,
+                    "outputTokens": output_tokens,
+                    "tokenCountMethod": token_count_method,
                 },
             )
         )
         if response.state is not OxyState.COMPLETED:
             raise RuntimeError(f"role task failed: {role_id}")
         return response
+
+    @staticmethod
+    def _decode_json_output(output: Any) -> dict[str, Any]:
+        if isinstance(output, dict):
+            return output
+        text = str(output or "").strip()
+        if text.startswith("```") and text.endswith("```"):
+            first_line, _, remainder = text.partition("\n")
+            if first_line.strip().lower() in {"```", "```json"}:
+                text = remainder.rsplit("```", 1)[0].strip()
+        try:
+            decoded = json.loads(text)
+            if isinstance(decoded, dict):
+                return decoded
+        except json.JSONDecodeError:
+            pass
+        decoder = json.JSONDecoder()
+        for index, character in enumerate(text):
+            if character != "{":
+                continue
+            try:
+                decoded, _ = decoder.raw_decode(text[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(decoded, dict):
+                return decoded
+        raise ValueError("model output does not contain a JSON object")
+
+    @classmethod
+    def _parse_content(cls, role_id: str, output: Any) -> BaseModel:
+        payload = cls._decode_json_output(output)
+        content_name = cls.CONTENT_NAMES[role_id]
+        candidates = (
+            "content",
+            content_name,
+            content_name[0].lower() + content_name[1:],
+        )
+        for key in candidates:
+            nested = payload.get(key)
+            if isinstance(nested, dict):
+                payload = nested
+                break
+        payload = {
+            key: value
+            for key, value in payload.items()
+            if key not in {"artifactType", "schemaVersion", "type"}
+        }
+        return cls.CONTENT_MODELS[role_id].model_validate(payload)
+
+    @classmethod
+    def _schema_instruction(cls, role_id: str) -> str:
+        schema = cls.CONTENT_MODELS[role_id].model_json_schema(by_alias=True)
+        return (
+            "\n\nReturn only one JSON object. Do not use Markdown fences or add commentary. "
+            "The JSON must validate against this schema:\n"
+            + json.dumps(schema, ensure_ascii=False)
+        )
+
+    async def _call_role_for_content(
+        self,
+        oxy_request: OxyRequest,
+        role_id: str,
+        query: str,
+        *,
+        project_id: str,
+        task_id: str,
+        run_id: str,
+        producer_provider_id: str | None = None,
+    ) -> tuple[OxyResponse, BaseModel]:
+        schema_instruction = self._schema_instruction(role_id)
+        response = await self._call_role(
+            oxy_request,
+            role_id,
+            query + schema_instruction,
+            project_id=project_id,
+            task_id=task_id,
+            run_id=run_id,
+            producer_provider_id=producer_provider_id,
+        )
+        try:
+            return response, self._parse_content(role_id, response.output)
+        except (ValueError, ValidationError) as first_error:
+            repair_query = (
+                "Your previous response did not validate. Repair it and return only "
+                "the required JSON object. Do not explain the repair.\n"
+                f"Validation error: {str(first_error)[:1000]}\n"
+                f"Previous response:\n{str(response.output)[:8000]}"
+                + schema_instruction
+            )
+            repaired = await self._call_role(
+                oxy_request,
+                role_id,
+                repair_query,
+                project_id=project_id,
+                task_id=task_id,
+                run_id=run_id,
+                producer_provider_id=producer_provider_id,
+            )
+            try:
+                return repaired, self._parse_content(role_id, repaired.output)
+            except (ValueError, ValidationError) as repair_error:
+                raise ValueError(
+                    f"{self.CONTENT_NAMES[role_id]} output failed schema validation"
+                ) from repair_error
 
     @staticmethod
     def _producer(response: OxyResponse) -> tuple[str, str]:
@@ -279,39 +415,38 @@ class BasicRoleWorkflow(BaseFlow):
             raise ValueError("workflow idea must not be empty")
         project_id = oxy_request.arguments.get("project_id") or generate_uuid()
         run_id = oxy_request.current_trace_id or generate_uuid()
+        task_id = oxy_request.arguments.get("task_id") or generate_uuid()
 
-        pm_task_id = generate_uuid()
-        pm = await self._call_role(
+        pm, requirement_content = await self._call_role_for_content(
             oxy_request,
             "product_manager",
             "Create a requirement specification for this idea:\n\n" + idea,
             project_id=project_id,
-            task_id=pm_task_id,
+            task_id=task_id,
             run_id=run_id,
         )
         pm_provider, pm_model = self._producer(pm)
         requirement = self.artifact_store.append(
             RequirementSpec(
                 project_id=project_id,
-                task_id=pm_task_id,
+                task_id=task_id,
                 producer_role="product_manager",
                 producer_agent=self.agent_profiles["product_manager"].id,
                 provider_id=pm_provider,
                 model_id=pm_model,
-                content=RequirementSpecContent(summary=str(pm.output)),
+                content=requirement_content,
                 validation_status=ValidationStatus.VALID,
             )
         )
         self._record_artifact_event(requirement, run_id)
 
-        architect_task_id = generate_uuid()
-        architect = await self._call_role(
+        architect, architecture_content = await self._call_role_for_content(
             oxy_request,
             "solution_architect",
             "Create architecture decisions from this RequirementSpec only:\n\n"
             + requirement.model_dump_json(by_alias=True),
             project_id=project_id,
-            task_id=architect_task_id,
+            task_id=task_id,
             run_id=run_id,
             producer_provider_id=pm_provider,
         )
@@ -319,26 +454,25 @@ class BasicRoleWorkflow(BaseFlow):
         architecture = self.artifact_store.append(
             ArchitectureDecision(
                 project_id=project_id,
-                task_id=architect_task_id,
+                task_id=task_id,
                 producer_role="solution_architect",
                 producer_agent=self.agent_profiles["solution_architect"].id,
                 provider_id=architect_provider,
                 model_id=architect_model,
-                content=ArchitectureDecisionContent(summary=str(architect.output)),
+                content=architecture_content,
                 source_artifact_ids=[requirement.id],
                 validation_status=ValidationStatus.VALID,
             )
         )
         self._record_artifact_event(architecture, run_id)
 
-        lead_task_id = generate_uuid()
-        lead = await self._call_role(
+        lead, task_graph_content = await self._call_role_for_content(
             oxy_request,
             "technical_lead",
             "Create an ordered TaskGraph from this ArchitectureDecision only:\n\n"
             + architecture.model_dump_json(by_alias=True),
             project_id=project_id,
-            task_id=lead_task_id,
+            task_id=task_id,
             run_id=run_id,
             producer_provider_id=architect_provider,
         )
@@ -346,26 +480,25 @@ class BasicRoleWorkflow(BaseFlow):
         task_graph = self.artifact_store.append(
             TaskGraph(
                 project_id=project_id,
-                task_id=lead_task_id,
+                task_id=task_id,
                 producer_role="technical_lead",
                 producer_agent=self.agent_profiles["technical_lead"].id,
                 provider_id=lead_provider,
                 model_id=lead_model,
-                content=TaskGraphContent(summary=str(lead.output)),
+                content=task_graph_content,
                 source_artifact_ids=[architecture.id],
                 validation_status=ValidationStatus.VALID,
             )
         )
         self._record_artifact_event(task_graph, run_id)
 
-        review_task_id = generate_uuid()
-        reviewer = await self._call_role(
+        reviewer, review_content = await self._call_role_for_content(
             oxy_request,
             "reviewer",
             "Review this TaskGraph independently and produce a ReviewReport:\n\n"
             + task_graph.model_dump_json(by_alias=True),
             project_id=project_id,
-            task_id=review_task_id,
+            task_id=task_id,
             run_id=run_id,
             producer_provider_id=lead_provider,
         )
@@ -373,12 +506,12 @@ class BasicRoleWorkflow(BaseFlow):
         review = self.artifact_store.append(
             ReviewReport(
                 project_id=project_id,
-                task_id=review_task_id,
+                task_id=task_id,
                 producer_role="reviewer",
                 producer_agent=self.agent_profiles["reviewer"].id,
                 provider_id=reviewer_provider,
                 model_id=reviewer_model,
-                content=ReviewReportContent(summary=str(reviewer.output)),
+                content=review_content,
                 source_artifact_ids=[task_graph.id],
                 validation_status=ValidationStatus.VALID,
             )

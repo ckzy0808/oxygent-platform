@@ -140,7 +140,7 @@ async function loadPrompts() {
     if (state.isLoading) return;
 
     state.isLoading = true;
-    showLoading("Loading prompts...");
+    showLoading("正在加载提示词…");
 
     try {
         const response = await fetch('/api/prompts/', {
@@ -159,11 +159,11 @@ async function loadPrompts() {
             renderPrompts();
             console.log(`✅ Loaded ${state.prompts.length} prompts`);
         } else {
-            throw new Error(result.message || 'Failed to load prompts');
+            throw new Error(result.message || '加载提示词失败');
         }
     } catch (error) {
         console.error('❌ Error loading prompts:', error);
-        showError('Failed to load prompts: ' + error.message);
+        showError('加载提示词失败：' + error.message);
     } finally {
         state.isLoading = false;
     }
@@ -211,8 +211,8 @@ function renderPrompts() {
         dom.promptsList.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">📝</div>
-                <h3>No prompts found</h3>
-                <p>Try adjusting your search or check if agents are running.</p>
+                <h3>未找到提示词</h3>
+                <p>请调整搜索条件，或检查智能体是否正在运行。</p>
             </div>
         `;
         return;
@@ -244,8 +244,8 @@ function createPromptCard(prompt) {
         <div class="prompt-card-header">
             <h3 class="prompt-title">${escapeHtml(prompt.prompt_key)}</h3>
             <div class="prompt-card-right">
-                <span class="badge badge-agent">${escapeHtml(prompt.agent_type || 'General')}</span>
-                <span class="badge-version-btn" onclick="event.stopPropagation(); showVersionHistory('${escapeHtml(prompt.prompt_key)}')" title="View version history">
+                <span class="badge badge-agent">${escapeHtml(prompt.agent_type || '通用')}</span>
+                <span class="badge-version-btn" onclick="event.stopPropagation(); showVersionHistory('${escapeHtml(prompt.prompt_key)}')" title="查看版本历史">
                     v${prompt.version || 1}
                     <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,4 10,8 6,12"/></svg>
                 </span>
@@ -255,9 +255,9 @@ function createPromptCard(prompt) {
             ${escapeHtml(truncatedContent)}
         </div>
         <div class="prompt-card-footer">
-            <button class="optimize-btn" onclick="event.stopPropagation(); showOptimizeModal('${escapeHtml(prompt.prompt_key)}')" title="Optimize prompt">
+            <button class="optimize-btn" onclick="event.stopPropagation(); showOptimizeModal('${escapeHtml(prompt.prompt_key)}')" title="优化提示词">
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v2M8 13v2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M1 8h2M13 8h2M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4"/><circle cx="8" cy="8" r="2.5"/></svg>
-                Optimize
+                优化
             </button>
         </div>
     `;
@@ -281,7 +281,7 @@ const escapeHtml = (() => {
 // CRUD Operations - Optimized with better error handling
 async function editPrompt(promptKey) {
     try {
-        showNotification('Loading prompt...', 'info');
+        showNotification('正在加载提示词…', 'info');
 
         const response = await fetch(`/api/prompts/${promptKey}`, {
             headers: { 'Accept': 'application/json' }
@@ -309,11 +309,11 @@ async function editPrompt(promptKey) {
 
             console.log(`📝 Editing prompt: ${promptKey}`);
         } else {
-            throw new Error(result.message || 'Failed to load prompt');
+            throw new Error(result.message || '加载提示词失败');
         }
     } catch (error) {
         console.error('❌ Error loading prompt:', error);
-        showNotification('Failed to load prompt: ' + error.message, 'error');
+        showNotification('加载提示词失败：' + error.message, 'error');
     }
 }
 
@@ -332,17 +332,17 @@ async function savePrompt() {
     const promptContent = dom.editContent.value.trim();
 
     if (!promptKey || !promptContent) {
-        showNotification('Please fill in all required fields.', 'error');
+        showNotification('请填写所有必填字段。', 'error');
         return;
     }
 
     if (promptContent === (state.editOriginalContent || '').trim()) {
-        showNotification('No changes detected. Update the prompt before saving.', 'info');
+        showNotification('未检测到更改，请修改提示词后再保存。', 'info');
         return;
     }
 
     try {
-        showNotification('Saving prompt...', 'info');
+        showNotification('正在保存提示词…', 'info');
 
         const payload = {
             prompt_key: promptKey,
@@ -369,37 +369,37 @@ async function savePrompt() {
         const result = await response.json();
 
         if (result.success) {
-            showNotification('Prompt updated successfully!', 'success');
+            showNotification('提示词更新成功！', 'success');
             hideEditModal();
             await loadPrompts(); // Refresh data
             console.log(`✅ Saved prompt: ${promptKey}`);
         } else {
-            throw new Error(result.message || 'Save failed');
+            throw new Error(result.message || '保存失败');
         }
     } catch (error) {
         console.error('❌ Error saving prompt:', error);
-        showNotification('Failed to save prompt: ' + error.message, 'error');
+        showNotification('保存提示词失败：' + error.message, 'error');
     }
 }
 
 async function refreshPrompt(promptKey) {
     try {
-        showNotification('Refreshing prompt...', 'info');
+        showNotification('正在刷新提示词…', 'info');
 
         // Simply reload the prompts list to refresh the data
         await loadPrompts();
 
-        showNotification('Prompt refreshed successfully!', 'success');
+        showNotification('提示词刷新成功！', 'success');
         console.log(`🔄 Refreshed: ${promptKey}`);
     } catch (error) {
         console.error('❌ Error refreshing prompt:', error);
-        showNotification('Failed to refresh prompt: ' + error.message, 'error');
+        showNotification('刷新提示词失败：' + error.message, 'error');
     }
 }
 
 async function showVersionHistory(promptKey) {
     try {
-        showNotification('Loading version history...', 'info');
+        showNotification('正在加载版本历史…', 'info');
 
         const response = await fetch(`/api/prompts/${promptKey}/history`, {
             headers: { 'Accept': 'application/json' }
@@ -417,11 +417,11 @@ async function showVersionHistory(promptKey) {
             showHistoryModal();
             console.log(`📋 Loaded ${versions.length} versions for: ${promptKey}`);
         } else {
-            throw new Error(result.message || 'Failed to load version history');
+            throw new Error(result.message || '加载版本历史失败');
         }
     } catch (error) {
         console.error('❌ Error loading version history:', error);
-        showNotification('Failed to load version history: ' + error.message, 'error');
+        showNotification('加载版本历史失败：' + error.message, 'error');
     }
 }
 
@@ -433,7 +433,7 @@ function renderVersionHistory(versions, promptKey) {
         dom.versionList.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">📋</div>
-                <p>No version history available.</p>
+                <p>暂无版本历史。</p>
             </div>
         `;
         return;
@@ -456,17 +456,17 @@ function renderVersionHistory(versions, promptKey) {
         item.innerHTML = `
             <div class="version-info">
                 <div class="version-number">
-                    Version ${version.version} ${isCurrent ? '(Current)' : ''}
+                    版本 ${version.version} ${isCurrent ? '（当前）' : ''}
                 </div>
                 <div class="version-date">📅 ${date}</div>
             </div>
             <div class="version-actions">
                 ${!isCurrent ? `<button class="btn btn-sm btn-warning" onclick="rollbackToVersion('${escapeHtml(promptKey)}', ${version.version})">
-                    ↩️ Rollback
+                    ↩️ 回滚
                     <span class="btn-badge"></span>
                 </button>` : ''}
                 <button class="btn btn-sm btn-primary" onclick="previewVersion('${escapeHtml(promptKey)}', ${version.version})">
-                    👁️ Preview
+                    👁️ 预览
                     <span class="btn-badge"></span>
                 </button>
             </div>
@@ -484,7 +484,7 @@ let currentPreviewData = null;
 
 async function previewVersion(promptKey, version) {
     try {
-        showNotification('Loading version preview...', 'info');
+        showNotification('正在加载版本预览…', 'info');
 
         const response = await fetch(`/api/prompts/${promptKey}/version/${version}`, {
             headers: { 'Accept': 'application/json' }
@@ -506,17 +506,17 @@ async function previewVersion(promptKey, version) {
 
             console.log(`👁️ Previewed version ${version} of: ${promptKey}`);
         } else {
-            throw new Error(result.message || 'Failed to load version');
+            throw new Error(result.message || '加载版本失败');
         }
     } catch (error) {
         console.error('❌ Error loading version:', error);
-        showNotification('Failed to load version: ' + error.message, 'error');
+        showNotification('加载版本失败：' + error.message, 'error');
     }
 }
 
 function updatePreviewModal(versionData, promptKey, version) {
     // Update version info
-    dom.previewVersionInfo.textContent = `Version ${version}`;
+    dom.previewVersionInfo.textContent = `版本 ${version}`;
 
     // Update date info
     const date = new Date(versionData.created_at || Date.now()).toLocaleString();
@@ -529,9 +529,9 @@ function updatePreviewModal(versionData, promptKey, version) {
     const lineCount = content.split('\n').length;
 
     dom.previewStats.innerHTML = `
-        <span>📝 ${wordCount} words</span>
-        <span>🔡 ${charCount} characters</span>
-        <span>📄 ${lineCount} lines</span>
+        <span>📝 ${wordCount} 个词</span>
+        <span>🔡 ${charCount} 个字符</span>
+        <span>📄 ${lineCount} 行</span>
     `;
 
     // Update content
@@ -539,7 +539,7 @@ function updatePreviewModal(versionData, promptKey, version) {
     dom.previewContent.className = 'preview-content wrapped';
 
     // Update rollback button
-    dom.previewRollbackBtn.innerHTML = `Rollback to this version <span class="btn-badge"></span>`;
+    dom.previewRollbackBtn.innerHTML = `回滚到此版本 <span class="btn-badge"></span>`;
     dom.previewRollbackBtn.onclick = () => {
         rollbackToVersion(promptKey, version);
     };
@@ -575,10 +575,10 @@ function copyPreviewContent() {
 
     navigator.clipboard.writeText(content).then(() => {
         showCopyFeedback();
-        showNotification('Content copied to clipboard!', 'success');
+        showNotification('内容已复制到剪贴板！', 'success');
     }).catch(err => {
         console.error('Failed to copy content:', err);
-        showNotification('Failed to copy content', 'error');
+        showNotification('复制内容失败', 'error');
     });
 }
 
@@ -604,7 +604,7 @@ function showCopyFeedback() {
     // Create feedback element
     const feedback = document.createElement('div');
     feedback.className = 'copy-feedback';
-    feedback.textContent = 'Copied!';
+    feedback.textContent = '已复制！';
 
     // Add to preview container
     const container = document.querySelector('.preview-content-container');
@@ -630,13 +630,13 @@ function showCopyFeedback() {
 
 async function rollbackToVersion(promptKey, version) {
     // Show new modern modal instead of confirm()
-    dom.rollbackMessage.textContent = `Are you sure you want to rollback "${promptKey}" to version ${version}?`;
+    dom.rollbackMessage.textContent = `确定要将“${promptKey}”回滚到版本 ${version} 吗？`;
     showRollbackModal();
 
     dom.confirmRollbackBtn.onclick = async () => {
         hideRollbackModal();
         try {
-            showNotification('Rolling back to version ' + version + '...', 'info');
+            showNotification('正在回滚到版本 ' + version + '…', 'info');
 
             const response = await fetch(`/api/prompts/${promptKey}/revert/${version}`, {
                 method: 'POST',
@@ -650,17 +650,17 @@ async function rollbackToVersion(promptKey, version) {
             const result = await response.json();
 
             if (result.success) {
-                showNotification('Successfully rolled back to version ' + version + '!', 'success');
+                showNotification('已成功回滚到版本 ' + version + '！', 'success');
                 hidePreviewModal(); // Hide preview if it was open
                 hideHistoryModal();
                 await loadPrompts();
                 console.log(`↩️ Rolled back ${promptKey} to version ${version}`);
             } else {
-                throw new Error(result.message || 'Rollback failed');
+                throw new Error(result.message || '回滚失败');
             }
         } catch (error) {
             console.error('❌ Error rolling back:', error);
-            showNotification('Failed to rollback: ' + error.message, 'error');
+            showNotification('回滚失败：' + error.message, 'error');
         }
     };
 }
@@ -725,7 +725,7 @@ let currentOptimizationData = null;
 
 async function showOptimizeModal(promptKey) {
     try {
-        showNotification('Loading prompt for optimization...', 'info');
+        showNotification('正在加载待优化提示词…', 'info');
 
         const response = await fetch(`/api/prompts/${promptKey}`, {
             headers: { 'Accept': 'application/json' }
@@ -750,7 +750,7 @@ async function showOptimizeModal(promptKey) {
 
             // Determine detection source
             const fromMetadata = normalizedMetadataType && normalizedMetadataType !== 'general';
-            dom.agentTypeSource.textContent = `Detected from ${fromMetadata ? 'metadata (' + promptData.agent_type + ')' : 'content analysis'}`;
+            dom.agentTypeSource.textContent = `检测来源：${fromMetadata ? '元数据（' + promptData.agent_type + '）' : '内容分析'}`;
 
             // Reset form
             dom.optimizeStrategy.value = 'comprehensive';
@@ -775,11 +775,11 @@ async function showOptimizeModal(promptKey) {
 
             console.log(`✨ Opened optimization for: ${promptKey}`);
         } else {
-            throw new Error(result.message || 'Failed to load prompt');
+            throw new Error(result.message || '加载提示词失败');
         }
     } catch (error) {
         console.error('❌ Error loading prompt for optimization:', error);
-        showNotification('Failed to load prompt: ' + error.message, 'error');
+        showNotification('加载提示词失败：' + error.message, 'error');
     }
 }
 
@@ -824,16 +824,16 @@ function normalizeAgentType(agentType) {
 
 async function previewOptimization() {
     if (!currentOptimizationData) {
-        showNotification('No prompt loaded for optimization', 'error');
+        showNotification('尚未加载待优化提示词', 'error');
         return;
     }
 
     try {
-        showNotification('Optimizing prompt... This may take a moment.', 'info');
+        showNotification('正在优化提示词，可能需要一些时间…', 'info');
 
         // Disable button during optimization
         dom.previewOptimizeBtn.disabled = true;
-        dom.previewOptimizeBtn.innerHTML = '⏳ Optimizing... <span class="btn-badge"></span>';
+        dom.previewOptimizeBtn.innerHTML = '⏳ 优化中… <span class="btn-badge"></span>';
 
         const payload = {
             prompt_key: currentOptimizationData.promptKey,
@@ -867,18 +867,18 @@ async function previewOptimization() {
             // Display results
             displayOptimizationResults(data);
 
-            showNotification('Optimization completed successfully!', 'success');
+            showNotification('提示词优化完成！', 'success');
             console.log('✨ Optimization completed');
         } else {
-            throw new Error(result.message || 'Optimization failed');
+            throw new Error(result.message || '优化失败');
         }
     } catch (error) {
         console.error('❌ Error during optimization:', error);
-        showNotification('Optimization failed: ' + error.message, 'error');
+        showNotification('优化失败：' + error.message, 'error');
     } finally {
         // Re-enable button
         dom.previewOptimizeBtn.disabled = false;
-        dom.previewOptimizeBtn.innerHTML = '👁️ Preview Optimization <span class="btn-badge"></span>';
+        dom.previewOptimizeBtn.innerHTML = '👁️ 预览优化 <span class="btn-badge"></span>';
     }
 }
 
@@ -888,16 +888,16 @@ function displayOptimizationResults(data) {
     dom.applyOptimizeBtn.style.display = 'inline-block';
 
     // Display analysis
-    dom.optimizeAnalysis.textContent = data.analysis || 'No analysis available';
+    dom.optimizeAnalysis.textContent = data.analysis || '暂无分析结果';
 
     // Display improvements
     const improvements = data.improvements || [];
     dom.optimizeImprovements.innerHTML = improvements.length > 0
         ? improvements.map(imp => `<li>${escapeHtml(imp)}</li>`).join('')
-        : '<li>No specific improvements listed</li>';
+        : '<li>未列出具体改进项</li>';
 
     // Display rationale
-    dom.optimizeRationale.textContent = data.rationale || 'No rationale provided';
+    dom.optimizeRationale.textContent = data.rationale || '未提供优化理由';
 
     // Display validation
     const validation = data.validated || data.validation || {};
@@ -905,7 +905,7 @@ function displayOptimizationResults(data) {
     const validationIcon = meetsConstraints ? '✅' : '⚠️';
 
     let validationHtml = `<div style="background: ${meetsConstraints ? '#e8f5e9' : '#fff3e0'}; padding: 10px; border-radius: 5px;">`;
-    validationHtml += `<strong>${validationIcon} ${meetsConstraints ? 'Validation Passed' : 'Validation Issues'}</strong>`;
+    validationHtml += `<strong>${validationIcon} ${meetsConstraints ? '校验通过' : '存在校验问题'}</strong>`;
 
     if (validation.missing_elements && validation.missing_elements.length > 0) {
         validationHtml += '<ul style="margin: 10px 0 0 20px;">';
@@ -916,7 +916,7 @@ function displayOptimizationResults(data) {
     }
 
     if (validation.warnings && validation.warnings.length > 0) {
-        validationHtml += '<p style="margin-top: 10px;"><strong>Warnings:</strong></p><ul style="margin: 5px 0 0 20px;">';
+        validationHtml += '<p style="margin-top: 10px;"><strong>警告：</strong></p><ul style="margin: 5px 0 0 20px;">';
         validation.warnings.forEach(warn => {
             validationHtml += `<li>${escapeHtml(warn)}</li>`;
         });
@@ -938,24 +938,24 @@ async function applyOptimization() {
     // Add detailed validation
     if (!currentOptimizationData) {
         console.error('currentOptimizationData is null');
-        showNotification('Optimization data lost. Please try optimizing again.', 'error');
+        showNotification('优化数据已丢失，请重新优化。', 'error');
         return;
     }
 
     if (!currentOptimizationData.optimizedContent) {
         console.error('No optimized content:', currentOptimizationData);
-        showNotification('No optimized prompt to apply', 'error');
+        showNotification('没有可应用的优化提示词', 'error');
         return;
     }
 
     if (!currentOptimizationData.promptKey) {
         console.error('No promptKey in optimization data:', currentOptimizationData);
-        showNotification('Prompt key is missing. Please try optimizing again.', 'error');
+        showNotification('缺少提示词键，请重新优化。', 'error');
         return;
     }
 
     try {
-        showNotification('Applying optimized prompt...', 'info');
+        showNotification('正在应用优化后的提示词…', 'info');
 
         // Get current prompt data
         const response = await fetch(`/api/prompts/${currentOptimizationData.promptKey}`, {
@@ -963,12 +963,12 @@ async function applyOptimization() {
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to fetch current prompt: ${response.status}`);
+            throw new Error(`获取当前提示词失败：${response.status}`);
         }
 
         const currentResult = await response.json();
         if (!currentResult.success) {
-            throw new Error('Failed to fetch current prompt data');
+            throw new Error('获取当前提示词数据失败');
         }
 
         const currentPrompt = currentResult.data;
@@ -1001,21 +1001,21 @@ async function applyOptimization() {
             // Save promptKey before hiding modal (which clears currentOptimizationData)
             const appliedPromptKey = currentOptimizationData.promptKey;
 
-            showNotification('Optimized prompt applied successfully!', 'success');
+            showNotification('优化后的提示词已成功应用！', 'success');
             hideOptimizeModal();
             await loadPrompts(); // Refresh the list
             console.log(`✅ Applied optimization for: ${appliedPromptKey}`);
         } else {
-            throw new Error(updateResult.message || 'Failed to apply optimization');
+            throw new Error(updateResult.message || '应用优化失败');
         }
     } catch (error) {
         console.error('❌ Error applying optimization:', error);
-        showNotification('Failed to apply optimization: ' + error.message, 'error');
+        showNotification('应用优化失败：' + error.message, 'error');
     }
 }
 
 // UI State Management - Optimized
-function showLoading(message = "Loading...") {
+function showLoading(message = "正在加载…") {
     if (!dom.promptsList) return;
 
     dom.promptsList.innerHTML = `
@@ -1032,10 +1032,10 @@ function showError(message) {
     dom.promptsList.innerHTML = `
         <div class="empty-state">
             <div class="empty-icon">⚠️</div>
-            <h3>Error</h3>
+            <h3>错误</h3>
             <p>${escapeHtml(message)}</p>
             <button class="btn btn-primary" onclick="loadPrompts()">
-                🔄 Retry
+                🔄 重试
             </button>
         </div>
     `;

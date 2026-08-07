@@ -41,7 +41,7 @@ class Project(PlatformModel):
     repository: str | None = Field(default=None, max_length=500)
     team: list[str] = Field(default_factory=list, max_length=50)
     active_tasks: int = Field(default=0, ge=0)
-    monthly_cost: float = Field(default=0.0, ge=0)
+    monthly_cost: float = Field(default=0.0, ge=0, exclude=True)
     settings: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)

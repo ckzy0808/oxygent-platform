@@ -3,10 +3,75 @@
 
     window.OxyGentApp = window.OxyGentApp || {};
 
+    function localizeMessage(message) {
+        var text = String(message || '');
+        var exact = {
+            'Platform request failed': '平台请求失败',
+            'Code Workspace is not configured': '代码工作区尚未配置',
+            'Provider mutations are disabled': '服务商修改已被禁用'
+        };
+        if (exact[text]) return exact[text];
+        return text
+            .replace(/not found/gi, '未找到')
+            .replace(/is unavailable/gi, '不可用')
+            .replace(/is disabled/gi, '已禁用')
+            .replace(/not configured/gi, '尚未配置');
+    }
+
+    var sourceImportLimits = {maxFiles: 3000, maxTotalBytes: 80 * 1024 * 1024, maxFileBytes: 8 * 1024 * 1024};
+    var ignoredSourceParts = new Set([
+        '.conda-env', '.coverage', '.git', '.idea', '.mypy_cache', '.pytest_cache', '.ruff_cache',
+        '.tox', '.venv', '.vscode', '__pycache__', 'build', 'coverage', 'dist',
+        'node_modules', 'target', 'venv'
+    ]);
+    var ignoredSourceNames = new Set(['.ds_store', 'desktop.ini', 'thumbs.db']);
+
+    function prepareSourceFiles(files) {
+        var accepted = [];
+        var paths = [];
+        var skipped = 0;
+        var totalBytes = 0;
+        Array.prototype.forEach.call(files || [], function (file) {
+            var path = file.webkitRelativePath || file.name || '';
+            var parts = path.split('/').filter(Boolean).map(function (part) { return part.toLowerCase(); });
+            var name = parts[parts.length - 1] || '';
+            var ignored = parts.some(function (part) {
+                return ignoredSourceParts.has(part) || part.indexOf('.aider') === 0;
+            }) || ignoredSourceNames.has(name) || name === '.env' || name.indexOf('.env.') === 0 || /\.(key|pem|p12|pfx)$/i.test(name);
+            if (ignored) {
+                skipped += 1;
+                return;
+            }
+            if (file.size > sourceImportLimits.maxFileBytes) {
+                throw new Error('文件过大，无法导入：' + path + '（单个文件上限 8 MB）');
+            }
+            if (accepted.length >= sourceImportLimits.maxFiles) {
+                throw new Error('项目文件过多。过滤依赖和构建目录后仍超过 3000 个文件。');
+            }
+            if (totalBytes + file.size > sourceImportLimits.maxTotalBytes) {
+                throw new Error('项目源码过大。过滤依赖和构建目录后仍超过 80 MB。');
+            }
+            accepted.push(file);
+            paths.push(path);
+            totalBytes += file.size;
+        });
+        if (!accepted.length) {
+            throw new Error('所选文件夹没有可导入的源码文件。依赖、构建产物、虚拟环境和凭证文件会被自动跳过。');
+        }
+        return {files: accepted, paths: paths, skipped: skipped, totalBytes: totalBytes};
+    }
+
     async function request(path, options) {
-        var response = await fetch('../api/v1/platform' + path, Object.assign({
-            headers: {'Content-Type': 'application/json'}
-        }, options || {}));
+        options = options || {};
+        var defaults = {};
+        if (!(options.body instanceof FormData)) defaults.headers = {'Content-Type': 'application/json'};
+        var response;
+        try {
+            response = await fetch('../api/v1/platform' + path, Object.assign(defaults, options));
+        } catch (error) {
+            if (error && error.name === 'AbortError') throw new Error('请求超时，请缩小项目后重试。');
+            throw new Error('无法连接本地 OxyGent 服务。请确认服务仍在运行；如果正在上传项目，请移除大型依赖或构建目录后重试。');
+        }
         var payload;
         try {
             payload = await response.json();
@@ -15,7 +80,7 @@
         }
         if (!response.ok) {
             var message = payload.detail || payload.message || 'Platform request failed';
-            throw new Error(message);
+            throw new Error(localizeMessage(message));
         }
         return payload.data || {};
     }
@@ -34,6 +99,12 @@
         listProjects: function () { return request('/projects'); },
         createProject: function (project) {
             return request('/projects', {method: 'POST', body: JSON.stringify(project)});
+        },
+        updateProject: function (projectId, project) {
+            return request('/projects/' + encodeURIComponent(projectId), {method: 'PATCH', body: JSON.stringify(project)});
+        },
+        deleteProject: function (projectId) {
+            return request('/projects/' + encodeURIComponent(projectId), {method: 'DELETE'});
         },
         getProject: function (projectId) { return request('/projects/' + encodeURIComponent(projectId)); },
         listTasks: function (projectId) {
@@ -71,7 +142,7 @@
         },
         listModels: function () { return request('/models'); },
         listRoutingPolicies: function () { return request('/routing-policies'); },
-        listUsage: function () { return request('/usage'); },
+        listUsage: function (filters) { return request('/usage' + insightQuery(filters || {})); },
         getInsightsSummary: function (filters) {
             return request('/insights/summary' + insightQuery(filters));
         },
@@ -93,6 +164,90 @@
         },
         listWorkflowEvents: function (runId) {
             return request('/workflows/runs/' + encodeURIComponent(runId) + '/events');
+        },
+        startProjectWorkflow: function (projectId, workflow) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/workflows/runs', {
+                method: 'POST', body: JSON.stringify(workflow)
+            });
+        },
+        workflowEventStreamUrl: function (runId) {
+            return '../api/v1/platform/workflows/runs/' + encodeURIComponent(runId) + '/stream';
+        },
+        listSourceWorkspaces: function (projectId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/source-workspaces');
+        },
+        listSourceAnalyses: function (projectId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/source-analyses');
+        },
+        analyzeSourceWorkspace: function (projectId, sourceWorkspaceId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/source-workspaces/' + encodeURIComponent(sourceWorkspaceId) + '/analyze', {method: 'POST'});
+        },
+        createBlankSourceWorkspace: function (projectId, name) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/source-workspaces/blank', {
+                method: 'POST', body: JSON.stringify({name: name || '空白项目'})
+            });
+        },
+        importSourceWorkspace: function (projectId, files, name) {
+            var selection = prepareSourceFiles(files);
+            var form = new FormData();
+            selection.files.forEach(function (file) {
+                form.append('files', file, file.name);
+            });
+            form.append('pathsJson', JSON.stringify(selection.paths));
+            form.append('name', name || (selection.paths[0] ? selection.paths[0].split('/')[0] : '上传的项目'));
+            return request('/projects/' + encodeURIComponent(projectId) + '/source-workspaces/import', {
+                method: 'POST', body: form
+            }).then(function (result) {
+                var source = result.sourceWorkspace || {};
+                result.importStats = {
+                    discoveredCount: selection.files.length + selection.skipped,
+                    fileCount: Number(source.fileCount || 0),
+                    skipped: selection.skipped + Number(source.skippedFileCount || 0),
+                    totalBytes: Number(source.totalBytes || selection.totalBytes || 0)
+                };
+                return result;
+            });
+        },
+        listCodeStageRuns: function (projectId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-stage-runs');
+        },
+        startCodeStageRun: function (projectId, payload) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-stage-runs', {
+                method: 'POST', body: JSON.stringify(payload)
+            });
+        },
+        getCodeStageRun: function (projectId, runId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-stage-runs/' + encodeURIComponent(runId));
+        },
+        getCodeStageChanges: function (projectId, runId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-stage-runs/' + encodeURIComponent(runId) + '/changes');
+        },
+        getCodeStageFileChange: function (projectId, runId, path) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-stage-runs/' + encodeURIComponent(runId) + '/changes/' + path.split('/').map(encodeURIComponent).join('/'));
+        },
+        getCodeStageLifecycle: function (projectId, runId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-stage-runs/' + encodeURIComponent(runId) + '/lifecycle');
+        },
+        verifyCodeStage: function (projectId, runId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-stage-runs/' + encodeURIComponent(runId) + '/verify', {method: 'POST'});
+        },
+        reviewCodeStage: function (projectId, runId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-stage-runs/' + encodeURIComponent(runId) + '/review', {method: 'POST'});
+        },
+        overrideCodeStageReview: function (projectId, runId, payload) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-stage-runs/' + encodeURIComponent(runId) + '/review-override', {method: 'POST', body: JSON.stringify(payload)});
+        },
+        startCodeStageReviewRevision: function (projectId, runId) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-stage-runs/' + encodeURIComponent(runId) + '/review-revision', {method: 'POST'});
+        },
+        approveCodeStage: function (projectId, runId, payload) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-stage-runs/' + encodeURIComponent(runId) + '/approve', {method: 'POST', body: JSON.stringify(payload)});
+        },
+        codeStageDownloadUrl: function (projectId, runId) {
+            return '../api/v1/platform/projects/' + encodeURIComponent(projectId) + '/code-stage-runs/' + encodeURIComponent(runId) + '/download';
+        },
+        codeStageFileUrl: function (projectId, runId, path) {
+            return '../api/v1/platform/projects/' + encodeURIComponent(projectId) + '/code-stage-runs/' + encodeURIComponent(runId) + '/files/' + path.split('/').map(encodeURIComponent).join('/');
         },
         listRepositorySources: function () { return request('/code/repository-sources'); },
         listRepositories: function (projectId) {
@@ -132,6 +287,11 @@
         },
         getCodeTaskDiff: function (projectId, taskId) {
             return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/diff');
+        },
+        generateCodePreview: function (projectId, taskId, instructions) {
+            return request('/projects/' + encodeURIComponent(projectId) + '/code-tasks/' + encodeURIComponent(taskId) + '/code-preview', {
+                method: 'POST', body: JSON.stringify({instructions: instructions || ''})
+            });
         },
         listVerificationProfiles: function (projectId) {
             return request('/projects/' + encodeURIComponent(projectId) + '/verification-profiles');

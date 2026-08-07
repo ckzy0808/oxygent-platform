@@ -11,6 +11,7 @@ from oxygent.platform import (
     ModelRequest,
     OllamaAdapter,
     OpenAICompatibleAdapter,
+    OpenAIResponsesAdapter,
     ProviderProfile,
 )
 
@@ -85,6 +86,49 @@ async def test_openai_compatible_adapter_reuses_existing_llm():
     assert response.output == "done"
     assert response.input_tokens == 4
     assert response.output_tokens == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_openai_responses_adapter_uses_input_protocol():
+    route = respx.post("https://responses.invalid/v1/custom-endpoint").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "response-1",
+                "object": "response",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {"type": "output_text", "text": "responses done"}
+                        ],
+                    }
+                ],
+                "usage": {"input_tokens": 7, "output_tokens": 3},
+            },
+        )
+    )
+    adapter = OpenAIResponsesAdapter(
+        MappingCredentialResolver({"secret-ref": "responses-test-secret"})
+    )
+
+    response = await adapter.complete(
+        request_for(
+            "openai-responses",
+            "https://responses.invalid/v1/custom-endpoint",
+            "responses-model",
+        )
+    )
+
+    payload = route.calls[0].request.content.decode()
+    assert route.called
+    assert '"input":[' in payload
+    assert '"messages"' not in payload
+    assert '"max_output_tokens":64' in payload
+    assert response.output == "responses done"
+    assert response.input_tokens == 7
+    assert response.output_tokens == 3
 
 
 @pytest.mark.asyncio

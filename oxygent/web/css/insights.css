@@ -170,7 +170,7 @@
 
 .og-insight-row {
     display: grid;
-    grid-template-columns: minmax(170px, 1.6fr) repeat(5, minmax(85px, .7fr));
+    grid-template-columns: minmax(170px, 1.6fr) repeat(5, minmax(95px, .7fr));
     align-items: center;
     min-width: 760px;
     padding: 11px 16px;

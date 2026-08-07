@@ -287,6 +287,12 @@ class ModelRouter(BaseLLM):
             model_id=model.id,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            token_count_method=(
+                response.token_count_method
+                if response
+                else TokenUsage().estimation_method
+            ),
+            invocation_type="workflow",
             latency_ms=max(latency_ms, 0),
             estimated_cost=self._estimated_cost(model, input_tokens, output_tokens),
             status=status,
@@ -389,6 +395,7 @@ class ModelRouter(BaseLLM):
                     input_tokens=model_response.input_tokens,
                     output_tokens=model_response.output_tokens,
                     model_name=model.model_name,
+                    estimation_method=model_response.token_count_method,
                 )
                 if token_usage.total_tokens == 0:
                     token_usage = build_token_usage(

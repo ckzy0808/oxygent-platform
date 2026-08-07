@@ -153,6 +153,11 @@ class MAS(BaseModel):
         exclude=True,
         description="Hook to transform outgoing messages before sending",
     )
+    func_record_model_usage: Optional[Callable] = Field(
+        default=None,
+        exclude=True,
+        description="Optional per-LLM-call token usage observer.",
+    )
 
     routers: list[Any] = Field(
         default_factory=list,
@@ -197,7 +202,12 @@ class MAS(BaseModel):
                 present; mainly used by internal helpers and tests.
         """
         super().__init__(**kwargs)
-        for field_name in ("func_filter", "func_interceptor", "func_process_message"):
+        for field_name in (
+            "func_filter",
+            "func_interceptor",
+            "func_process_message",
+            "func_record_model_usage",
+        ):
             func = getattr(self, field_name, None)
             if func is not None:
                 object.__setattr__(self, field_name, ensure_async(func))

@@ -139,6 +139,7 @@
     color: #027a48;
 }
 
+.og-phase-awaiting-implementation .og-phase-index,
 .og-phase-awaiting-approval .og-phase-index,
 .og-phase-node.current .og-phase-index {
     border-color: #6172f3;
@@ -308,6 +309,7 @@
     color: #027a48;
 }
 
+.og-status-awaiting-implementation,
 .og-status-awaiting-approval,
 .og-status-analyzing,
 .og-status-planning,

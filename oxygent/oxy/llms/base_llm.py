@@ -6,6 +6,7 @@ consistent interface for different LLM providers.
 """
 
 import copy
+import inspect
 import json
 import logging
 import os
@@ -293,6 +294,24 @@ class BaseLLM(Oxy):
         usage = oxy_response.extra.get("usage")
         if isinstance(usage, TokenUsage):
             aggregate_token_usage(oxy_response.oxy_request, usage)
+            observer = getattr(
+                oxy_response.oxy_request.mas, "func_record_model_usage", None
+            )
+            if observer is not None:
+                try:
+                    observed = observer(self, oxy_response.oxy_request, usage)
+                    if inspect.isawaitable(observed):
+                        await observed
+                except Exception as exc:
+                    logger.warning(
+                        "model usage observer failed; model=%s error_type=%s",
+                        self.name,
+                        type(exc).__name__,
+                        extra={
+                            "trace_id": oxy_response.oxy_request.current_trace_id,
+                            "node_id": oxy_response.oxy_request.node_id,
+                        },
+                    )
             oxy_response.extra["usage"] = usage.model_dump()
         return oxy_response
 

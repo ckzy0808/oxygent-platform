@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="utf-8">
     <!-- 强制不缓存的 meta 标签 -->
@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <link rel="shortcut icon" href="./image/group-favicon.png" type="image/x-icon">
-    <title>Node Explorer - OxyGent</title>
+    <title>节点查看器 - OxyGent</title>
     <link href="./css/normalize.css" rel="stylesheet">
     <link href="./css/node.css" rel="stylesheet">
     <link href="./css/style_load1.css" rel="stylesheet">
@@ -34,37 +34,37 @@
 <div class="node-header">
     <div class="node-header-left">
         <img class="node-header-logo" src="./image/group-favicon.png" alt="">
-        <span class="node-header-title">Node Explorer</span>
+        <span class="node-header-title">节点浏览器</span>
     </div>
     <div class="node-header-center">
         <div class="tabs">
             <div class="tab-item tab-text-active" data-id="flowchart-container">
-                <span class="tab-text">Flowchart</span>
+                <span class="tab-text">流程图</span>
             </div>
             <div class="tab-item" data-id="gantt-container-section">
-                <span class="tab-text">Gantt</span>
+                <span class="tab-text">甘特图</span>
             </div>
             <div class="tab-item" data-id="swimlane-container-section">
-                <span class="tab-text">Swimlane</span>
+                <span class="tab-text">泳道图</span>
             </div>
             <div class="tab-item" data-id="timeline-container-section">
-                <span class="tab-text">Timeline</span>
+                <span class="tab-text">时间线</span>
             </div>
         </div>
     </div>
     <div class="node-header-right">
-        <label class="flowchart-toggle-master" id="flowchartMasterLabel" title="Show the outermost master agent wrapper in the flowchart">
+        <label class="flowchart-toggle-master" id="flowchartMasterLabel" title="在流程图中显示最外层主智能体容器">
             <input type="checkbox" id="flowchartMasterToggle" onchange="toggleFlowchartMaster(this.checked)">
             <span class="flowchart-toggle-slider"></span>
-            <span class="flowchart-toggle-text">Master Node</span>
+            <span class="flowchart-toggle-text">主节点</span>
         </label>
-        <button class="node-header-btn" onclick="handleCollapse()" id="collapseToggleBtn" title="Toggle Graph">
+        <button class="node-header-btn" onclick="handleCollapse()" id="collapseToggleBtn" title="切换图表显示">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,9 7,5 11,9"/></svg>
-            <span>Graph</span>
+            <span>图表</span>
         </button>
-        <button class="node-header-btn" onclick="startGuideTour()" title="Feature Guide">
+        <button class="node-header-btn" onclick="startGuideTour()" title="功能引导">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="7"/><path d="M6 6a2 2 0 1 1 2.5 1.9c-.5.3-.5.6-.5 1.1"/><circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="none"/></svg>
-            <span>Guide</span>
+            <span>引导</span>
         </button>
         <button class="node-header-btn" onclick="window.open('index.html', '_self')">
             <img src="./image/arrow-left.svg" alt=""/>
@@ -103,27 +103,27 @@
         <span class="agentCard-separator"></span>
         <span id="trace_id" class="metaInfo"></span>
         <span class="agentCard-separator"></span>
-        <span class="metaInfo">caller: <span id="node_caller" class="ellipsisspan metaInfo"></span></span>
+        <span class="metaInfo">调用方：<span id="node_caller" class="ellipsisspan metaInfo"></span></span>
     </div>
     </div>
     <div class="node-container">
         <div class="node-left">
             <div class="mod-header">
                 <div class="mod-header-title">
-                    Configuration
+                    配置
                 </div>
                 <div class="mod-header-operation">
                     <button class="mod-header-operation-btn" id="pre" onclick="pre()">
                         <img src="./image/arrow-left.svg" alt="">
-                        Pre
+                        上一步
                     </button>
                     <button class="mod-header-operation-btn" id="next" onclick="next()">
                         <img src="./image/arrow-right.svg" alt="">
-                        Next
+                        下一步
                     </button>
                     <button class="mod-header-operation-btn" id="call_llm" onclick="call_llm()">
                         <img src="./image/refresh.svg" alt="">
-                        Regenerate
+                        重新生成
                     </button>
                 </div>
 
@@ -139,7 +139,7 @@
         </div>
         <div class="node-right" id="rightPlayGroundId">
             <div class="right_top">
-                <span>PlayGround</span>
+                <span>调试台</span>
             </div>
             <div class="right_content">
                 <div id="llm_result"></div>
@@ -158,8 +158,8 @@
         <div class="tour-tooltip-step">
             <span class="tour-tooltip-counter" id="tour-counter"></span>
             <div class="tour-tooltip-nav">
-                <button class="tour-tooltip-btn" id="tour-skip-btn" onclick="endGuideTour()">Skip</button>
-                <button class="tour-tooltip-btn primary" id="tour-next-btn" onclick="nextGuideTourStep()">Next</button>
+                <button class="tour-tooltip-btn" id="tour-skip-btn" onclick="endGuideTour()">跳过</button>
+                <button class="tour-tooltip-btn primary" id="tour-next-btn" onclick="nextGuideTourStep()">下一步</button>
             </div>
         </div>
     </div>
@@ -398,7 +398,7 @@
                                     <label class="text_x_6">${key}:</label>
                                     <div class="mod-right-text_x_8_wrap">
                                         <textarea data-key="${key}" data-type="${typeValue}" id="${key}"  
-                                            placeholder="None" class="text_x_8 ">${value}</textarea>
+                                            placeholder="无" class="text_x_8 ">${value}</textarea>
                                     </div>
                                 </div>
                             `
@@ -412,7 +412,7 @@
                                     <div class="mod-right-cnt_col">
                                         <label class="text_x_6">${role}:</label>
                                         <div class="mod-right-text_x_8_wrap">
-                                            <textarea data-pre-key="${argumentPrekey}" data-key="${key}" data-type="${typeValue}" data-role="${role}" rows="4" cols="50" id="${role}"  placeholder="None" class="text_x_8">${content}</textarea>
+                                            <textarea data-pre-key="${argumentPrekey}" data-key="${key}" data-type="${typeValue}" data-role="${role}" rows="4" cols="50" id="${role}"  placeholder="无" class="text_x_8">${content}</textarea>
                                         </div>
                                     </div>
                                 `
@@ -477,7 +477,7 @@
             currentXhr = null;
             isGenerating = false;
             $("#regen-loading").remove();
-            $("#call_llm").html('<img src="./image/refresh.svg" alt=""> Regenerate').prop("disabled", false);
+            $("#call_llm").html('<img src="./image/refresh.svg" alt=""> 重新生成').prop("disabled", false);
             return;
         }
 
@@ -535,7 +535,7 @@
         // loading + 按钮切换为 Stop
         $("#llm_result").append('<div class="loading" id="regen-loading"> <span></span> <span></span> <span></span> <span></span> <span></span> </div>');
         isGenerating = true;
-        $("#call_llm").html('<img src="./image/refresh.svg" alt=""> Stop').prop("disabled", false);
+        $("#call_llm").html('<img src="./image/refresh.svg" alt=""> 停止').prop("disabled", false);
 
         // 立即滚动到底部，让用户看到 loading 动画
         const scrollContainer = $('.right_content');
@@ -584,7 +584,7 @@
             complete: function () {
                 isGenerating = false;
                 currentXhr = null;
-                $("#call_llm").html('<img src="./image/refresh.svg" alt=""> Regenerate').prop("disabled", false);
+                $("#call_llm").html('<img src="./image/refresh.svg" alt=""> 重新生成').prop("disabled", false);
             }
         });
     }
@@ -607,7 +607,7 @@
             imgUrl = typeMap[data.node_type];
         }
 
-        const deleteBtn = isFirst ? '' : `<button class="pg-delete-btn" onclick="deletePgItem('${itemId}')" title="Delete"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>`;
+        const deleteBtn = isFirst ? '' : `<button class="pg-delete-btn" onclick="deletePgItem('${itemId}')" title="删除"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>`;
 
         const html = `
             <div class="pg-item" id="${itemId}">
@@ -617,12 +617,12 @@
                 <div class="pg-bubble">
                     <div class="pg-bubble-header">
                         <span class="pg-item-name">${agentName}</span>
-                        ${isFirst ? '' : '<span class="regen-badge">Regenerated</span>'}
+                        ${isFirst ? '' : '<span class="regen-badge">已重新生成</span>'}
                         ${deleteBtn}
                         <div class="pg-item-actions">
                             <div class="output-toggle-group">
                                 <button class="output-toggle-btn active" onclick="togglePgView('${itemId}', 'md', this)">Markdown</button>
-                                <button class="output-toggle-btn" onclick="togglePgView('${itemId}', 'raw', this)">Raw</button>
+                                <button class="output-toggle-btn" onclick="togglePgView('${itemId}', 'raw', this)">原始文本</button>
                             </div>
                         </div>
                     </div>
@@ -646,7 +646,7 @@
                 </div>
                 <div class="pg-bubble">
                     <div class="pg-bubble-header">
-                        <span class="pg-item-name" style="color:#EF4444">Error</span>
+                        <span class="pg-item-name" style="color:#EF4444">错误</span>
                     </div>
                     <div class="pg-item-body" style="background:#FEF2F2; color:#991B1B;">
                         <pre style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:13px; font-family:monospace; color:inherit;">${escapeHtml(errMsg)}</pre>
@@ -990,57 +990,57 @@
         {
             selector: '.tabs',
             icon: '\u{1F4CA}',
-            title: 'View Tabs',
-            desc: 'Switch between Flowchart (call graph), Gantt (execution timing), Swimlane (agent interaction lanes), and Timeline (sequential step chain) views.',
+            title: '视图标签',
+            desc: '可在流程图（调用图）、甘特图（执行时序）、泳道图（智能体交互）和时间线（顺序步骤链）之间切换。',
             tooltipPos: 'below'
         },
         {
             selector: '#collapseToggleBtn',
             icon: '\u{1F504}',
-            title: 'Toggle Graph',
-            desc: 'Collapse or expand the graph visualization panel to free up space for the configuration and playground sections below.',
+            title: '切换图表',
+            desc: '收起或展开图表可视化面板，为下方配置区和调试台释放空间。',
             tooltipPos: 'below'
         },
         {
             selector: '#collapseExample',
             icon: '\u{1F5BC}',
-            title: 'Graph Panel',
-            desc: 'Renders the Oxy execution graph for the current trace. Click any node to select it — the panels below will update to show that node\'s details. Drag the bottom edge to resize.',
+            title: '图表面板',
+            desc: '渲染当前追踪的 Oxy 执行图。点击节点后，下方面板会显示其详情；拖动底边可调整大小。',
             tooltipPos: 'below'
         },
         {
             selector: '.agentCard',
             icon: '\u{1F4E6}',
-            title: 'Oxy Info Card',
-            desc: 'Shows the selected Oxy node\'s name, type (Agent, Tool, LLM, Flow, etc.), trace_id, and its caller. Updates automatically when you click a different node in the graph.',
+            title: 'Oxy 信息卡',
+            desc: '显示所选 Oxy 节点的名称、类型（智能体、工具、LLM、流程等）、trace_id 和调用方。点击其他节点时会自动更新。',
             tooltipPos: 'below'
         },
         {
             selector: '.mod-header-operation',
             icon: '\u{2699}️',
-            title: 'Action Buttons',
-            desc: 'Pre/Next step through the execution sequence of the current node. Regenerate sends a POST /call request using the edited parameters from the left panel (only enabled for LLM nodes).',
+            title: '操作按钮',
+            desc: '使用上一步/下一步浏览当前节点的执行序列。重新生成会使用左侧编辑后的参数发送 POST /call 请求（仅对 LLM 节点启用）。',
             tooltipPos: 'below'
         },
         {
             selector: '.mod-left',
             icon: '\u{1F4DD}',
-            title: 'Node Attributes',
-            desc: 'Editable class_attr of the selected node: system_prompt, model name, temperature, tool configs, etc. Changes here are sent as parameters when you click Regenerate.',
+            title: '节点属性',
+            desc: '可编辑所选节点的 class_attr，例如 system_prompt、模型名、temperature 和工具配置等。重新生成时会把这些更改作为参数发送。',
             tooltipPos: 'right'
         },
         {
             selector: '.mod-right',
             icon: '\u{1F4E5}',
-            title: 'Input / Output',
-            desc: 'Shows the request arguments (messages, query, etc.) for the selected execution step. Editable — modified values are included when Regenerate is called.',
+            title: '输入 / 输出',
+            desc: '显示所选执行步骤的请求参数（消息、问题等），并可编辑；重新生成时会包含修改后的值。',
             tooltipPos: 'left'
         },
         {
             selector: '.node-right',
             icon: '\u{1F3AE}',
-            title: 'PlayGround',
-            desc: 'Displays the LLM response (rendered as Markdown). After clicking Regenerate, the new response appends here so you can compare before and after results.',
+            title: '调试台',
+            desc: '显示以 Markdown 渲染的 LLM 响应。点击重新生成后，新响应会追加到这里，便于对比前后结果。',
             tooltipPos: 'left'
         }
     ];
@@ -1130,7 +1130,7 @@
             document.getElementById('tour-desc').textContent = step.desc;
             document.getElementById('tour-counter').textContent = (index + 1) + ' / ' + _guideTourSteps.length;
             var nextBtn = document.getElementById('tour-next-btn');
-            nextBtn.textContent = (index === _guideTourSteps.length - 1) ? 'Finish' : 'Next';
+            nextBtn.textContent = (index === _guideTourSteps.length - 1) ? '完成' : '下一步';
         }
 
         if (firstShow) {

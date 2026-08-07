@@ -16,6 +16,7 @@ from .common import PlatformModel, to_camel, utc_now
 
 class ApprovalAction(str, Enum):
     REQUEST_REVISION = "requestRevision"
+    ACCEPT_REVIEW_RISK = "acceptReviewRisk"
     APPROVE_CHANGES = "approveChanges"
     APPLY_TO_BRANCH = "applyToBranch"
     EXPORT_PATCH = "exportPatch"

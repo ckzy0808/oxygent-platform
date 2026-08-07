@@ -58,6 +58,7 @@ class EngineeringStatus(str, Enum):
     IMPLEMENTING = "implementing"
     TESTING = "testing"
     REVIEWING = "reviewing"
+    AWAITING_IMPLEMENTATION = "awaiting-implementation"
     AWAITING_APPROVAL = "awaiting-approval"
     COMPLETED = "completed"
     BLOCKED = "blocked"
@@ -102,7 +103,9 @@ class WorkflowStageProjection(PlatformModel):
     summary: str = ""
     tools_used: list[str] = Field(default_factory=list)
     artifact: dict[str, Any] | None = None
-    cost: float = Field(default=0.0, ge=0)
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    cost: float = Field(default=0.0, ge=0, exclude=True)
     duration_ms: float = Field(default=0.0, ge=0)
     event_count: int = Field(default=0, ge=0)
     started_at: datetime | None = None
@@ -116,7 +119,8 @@ class WorkflowRunProjection(PlatformModel):
     name: str
     status: EngineeringStatus
     current_phase: WorkflowPhase | None = None
-    total_cost: float = Field(default=0.0, ge=0)
+    total_tokens: int = Field(default=0, ge=0)
+    total_cost: float = Field(default=0.0, ge=0, exclude=True)
     total_duration_ms: float = Field(default=0.0, ge=0)
     started_at: datetime
     updated_at: datetime
@@ -186,6 +190,14 @@ def project_workflow_run(events: list[WorkflowEvent]) -> WorkflowRunProjection:
                 summary=summary,
                 toolsUsed=tools,
                 artifact=artifact,
+                inputTokens=sum(
+                    int(event.payload.get("inputTokens", 0) or 0)
+                    for event in phase_events
+                ),
+                outputTokens=sum(
+                    int(event.payload.get("outputTokens", 0) or 0)
+                    for event in phase_events
+                ),
                 cost=sum(
                     _nonnegative_number(event.payload.get("cost"))
                     for event in phase_events
@@ -206,7 +218,22 @@ def project_workflow_run(events: list[WorkflowEvent]) -> WorkflowRunProjection:
     active_stages = [
         stage for stage in stages if stage.status is not EngineeringStatus.NOT_STARTED
     ]
-    current = active_stages[-1] if active_stages else None
+    latest_active_event = next(
+        (
+            event
+            for event in reversed(ordered)
+            if event.payload.get("status") != EngineeringStatus.NOT_STARTED.value
+        ),
+        None,
+    )
+    current = (
+        next(
+            (stage for stage in stages if stage.phase is latest_active_event.phase),
+            None,
+        )
+        if latest_active_event
+        else None
+    )
     status = current.status if current else EngineeringStatus.NOT_STARTED
     if any(stage.status is EngineeringStatus.FAILED for stage in active_stages):
         status = EngineeringStatus.FAILED
@@ -227,6 +254,7 @@ def project_workflow_run(events: list[WorkflowEvent]) -> WorkflowRunProjection:
         name=name,
         status=status,
         currentPhase=current.phase if current else None,
+        totalTokens=sum(stage.input_tokens + stage.output_tokens for stage in stages),
         totalCost=sum(stage.cost for stage in stages),
         totalDurationMs=sum(stage.duration_ms for stage in stages),
         startedAt=ordered[0].timestamp,

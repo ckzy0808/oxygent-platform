@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="utf-8">
     <!-- 强制不缓存的 meta 标签 -->
@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <link rel="shortcut icon" href="./image/group-favicon.png" type="image/x-icon">
-    <title>OxyGent App</title>
+    <title>中远海运智能协作中心 · OxyGent</title>
     <link rel="stylesheet" href="./css/style.css">
     <link rel="stylesheet" href="./css/main.css"/>
     <link rel="stylesheet" href="./css/tree.css"/>
@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="./css/app-shell.css"/>
     <link rel="stylesheet" href="./css/chat-modes.css"/>
     <link rel="stylesheet" href="./css/projects.css"/>
+    <link rel="stylesheet" href="./css/chat-enterprise.css"/>
     <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
     <script src="./js/app-shell.js" defer></script>
     <script src="./js/api-client.js" defer></script>
@@ -34,7 +35,13 @@
 <body class="timeline-hidden tracegraph-hidden" data-oxygent-page="chat">
 <div class="header">
     <div class="header-left">
-        <img class="header-left-img" src="./image/group-favicon.png" alt="">
+        <a class="cosco-enterprise-brand" href="index.html" aria-label="返回中远海运智能协作中心">
+            <img src="./image/brand/cosco-shipping-logo.jpg" alt="中国远洋海运集团有限公司">
+            <span class="cosco-product-name">
+                <strong>智能协作中心</strong>
+                <small>OxyGent Agent Platform</small>
+            </span>
+        </a>
         <!--        <div class="operate">-->
         <!--            <button onclick="save_historys()">save</button>-->
         <!--            <div class="nice-select">-->
@@ -46,7 +53,7 @@
             <input type="file" id="fileInput" accept=".json" style="display: none;">
             <div class="cascader-container">
                 <div class="cascader-input" id="cascaderInput">
-                    <span class="cascader-input-placeholder">File</span>
+                    <span class="cascader-input-placeholder">文件</span>
                     <img class="arrow" src="image/group-down.svg"/>
                 </div>
                 <div class="cascader-dropdown" id="cascaderDropdown">
@@ -54,21 +61,24 @@
                 </div>
             </div>
         </div>
-        <button class="btn-nav-toggle" onclick="window.open('history.html', '_blank')" title="Conversation History">
-            <img src="./image/history.svg" alt="History"/>
-            History
+        <button class="btn-nav-toggle" onclick="window.open('history.html', '_blank')" title="对话历史">
+            <img src="./image/history.svg" alt="历史记录"/>
+            历史记录
         </button>
-        <button class="btn-nav-toggle" onclick="window.open('prompts.html', '_blank')" title="Prompt Management">
-            <img src="./image/prompt.svg" alt="Prompts"/>
-            Prompts
+        <button class="btn-nav-toggle" onclick="window.open('prompts.html', '_blank')" title="提示词管理">
+            <img src="./image/prompt.svg" alt="提示词"/>
+            提示词
         </button>
-        <button class="btn-nav-toggle" onclick="startGuideTour()" title="Feature Guide">
-            <img src="./image/guide.svg" alt="Guide"/>
-            Guide
+        <button class="btn-nav-toggle" onclick="startGuideTour()" title="功能引导">
+            <img src="./image/guide.svg" alt="功能引导"/>
+            引导
         </button>
     </div>
     <div id="header_title_id" class="header-title"></div>
     <div class="header-right">
+        <div class="cosco-capability-badge" title="支持按角色配置模型、工具和工作流">
+            <span></span> 多角色 · 多模型协作
+        </div>
         <div class="control">
             <button onclick="begin()">
                 <img src="./image/arrow-left-double.svg" alt=""/>
@@ -89,13 +99,13 @@
             </button>
             <div id="step"></div>
         </div>
-        <button class="btn-timeline-toggle" id="btn-timeline-toggle" onclick="toggleTimeline()" title="Toggle Steps">
+        <button class="btn-timeline-toggle" id="btn-timeline-toggle" onclick="toggleTimeline()" title="显示或隐藏步骤">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,9 7,5 11,9"/></svg>
-            <span class="btn-toggle-label">Steps</span>
+            <span class="btn-toggle-label">步骤</span>
         </button>
-        <button class="btn-tracegraph-toggle" id="btn-tracegraph-toggle" onclick="toggleTraceGraph()" title="Toggle Trace Graph">
+        <button class="btn-tracegraph-toggle" id="btn-tracegraph-toggle" onclick="toggleTraceGraph()" title="显示或隐藏追踪图">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,9 7,5 11,9"/></svg>
-            <span class="btn-toggle-label">Trace Graph</span>
+            <span class="btn-toggle-label">追踪图</span>
         </button>
         <!--        todo  中英文  主题-->
         <!--                <div class="global-buttons">-->
@@ -121,13 +131,20 @@
 <div class="tracegraph-section collapsed" id="tracegraph-section">
     <div class="tracegraph-bar">
         <div class="tracegraph-body" id="tracegraph-body">
-            <div class="tg-empty">No branches yet.</div>
+            <div class="tg-empty">暂无分支。</div>
         </div>
         <div class="tracegraph-resize-handle" id="tracegraph-resize-handle"></div>
     </div>
 </div>
 <div class="container">
     <div class="center">
+        <div class="agent-overview-header">
+            <div>
+                <strong>智能体概览</strong>
+                <small>当前会话组织</small>
+            </div>
+            <span>精简视图</span>
+        </div>
         <div class="center-scroll xMind">
             <div id="org-zoom-wrapper"></div>
         </div>
@@ -136,17 +153,17 @@
             <div id="org-minimap-viewport"></div>
         </div>
         <div id="org-zoom-controls">
-            <button id="org-zoom-out" title="Zoom out">&minus;</button>
+            <button id="org-zoom-out" title="缩小">&minus;</button>
             <span id="org-zoom-level">100%</span>
-            <button id="org-zoom-in" title="Zoom in">+</button>
-            <button id="org-zoom-reset" title="Reset zoom">&#x27F2;</button>
+            <button id="org-zoom-in" title="放大">+</button>
+            <button id="org-zoom-reset" title="重置缩放">&#x27F2;</button>
         </div>
     </div>
     <div class="left">
         <div class="left_bottom">
             <div class="chat-container">
                 <div id="chat_title">
-                    Playground
+                    调试台
                 </div>
                 <div class="chat_toggle_group">
                     <button id="message_group" onclick="openRight()">
@@ -156,6 +173,38 @@
             </div>
 
             <div id="chat_history">
+                <section class="chat-welcome" id="chat-welcome" aria-labelledby="chat-welcome-title">
+                    <div class="chat-welcome-kicker">
+                        <span class="chat-welcome-mark">OXY</span>
+                        <span>企业级智能体协作平台</span>
+                    </div>
+                    <h1 id="chat-welcome-title">让专业智能体协同推进复杂任务</h1>
+                    <p class="chat-welcome-description">从研究分析到项目交付，在同一工作空间中组织角色、模型、工具与可追踪产物。</p>
+                    <div class="chat-advantage-list" aria-label="平台能力">
+                        <span>多角色协作</span>
+                        <span>多模型路由</span>
+                        <span>结构化产物</span>
+                        <span>全链路追踪</span>
+                    </div>
+                    <div class="chat-starter-grid" aria-label="快捷任务">
+                        <button type="button" class="chat-starter" data-chat-prompt="请围绕我提供的主题开展航运与供应链研究，先明确研究范围、关键假设和信息缺口，再给出结构化结论。">
+                            <img src="./image/org_knowledge.svg" alt="">
+                            <span><strong>航运研究</strong><small>梳理市场、政策与行业信息</small></span>
+                        </button>
+                        <button type="button" class="chat-starter" data-chat-prompt="请分析我提供的供应链场景，识别关键风险、影响范围、预警信号和可执行的应对建议。">
+                            <img src="./image/org_flow.svg" alt="">
+                            <span><strong>供应链风险</strong><small>识别风险并形成应对方案</small></span>
+                        </button>
+                        <button type="button" class="chat-starter" data-chat-prompt="请分析我上传的数据或材料，提取关键指标、异常变化和管理层需要关注的结论，并说明分析依据。">
+                            <img src="./image/org_model.svg" alt="">
+                            <span><strong>经营分析</strong><small>从材料与数据中提炼洞察</small></span>
+                        </button>
+                        <button type="button" class="chat-starter" data-chat-prompt="请把我接下来描述的目标拆解为可执行的项目任务，明确角色分工、关键产物、依赖关系和验收标准。">
+                            <img src="./image/org_tool.svg" alt="">
+                            <span><strong>项目任务拆解</strong><small>从想法转化为协作计划</small></span>
+                        </button>
+                    </div>
+                </section>
                 <ul class="content" id="chatbox">
                 </ul>
             </div>
@@ -186,43 +235,48 @@
                 </div> -->
                 <div class="chat-agent-list" id="chatAgentList" style="display:none;"></div>
 
+                <div class="chat-composer-heading">
+                    <div><span class="chat-composer-status"></span><strong>向智能协作团队提问</strong></div>
+                    <small>可输入 <b>@</b> 指定智能体</small>
+                </div>
+
                 <div class="chat-mode-shell" id="chat-mode-shell">
                     <div class="chat-mode-row">
-                        <div class="chat-mode-switcher" role="group" aria-label="Chat mode">
-                            <button type="button" class="chat-mode-button active" data-chat-mode="general" aria-pressed="true">General</button>
-                            <button type="button" class="chat-mode-button" data-chat-mode="research" aria-pressed="false">Research</button>
-                            <button type="button" class="chat-mode-button" data-chat-mode="data" aria-pressed="false">Data</button>
-                            <button type="button" class="chat-mode-button" data-chat-mode="code" aria-pressed="false">Code</button>
+                        <div class="chat-mode-switcher" role="group" aria-label="对话模式">
+                            <button type="button" class="chat-mode-button active" data-chat-mode="general" aria-pressed="true">通用</button>
+                            <button type="button" class="chat-mode-button" data-chat-mode="research" aria-pressed="false">研究</button>
+                            <button type="button" class="chat-mode-button" data-chat-mode="data" aria-pressed="false">数据</button>
+                            <button type="button" class="chat-mode-button" data-chat-mode="code" aria-pressed="false">代码</button>
                         </div>
-                        <button type="button" class="chat-project-action" id="convert-project-task" disabled title="Loading Projects">Convert to Project Task</button>
+                        <button type="button" class="chat-project-action" id="convert-project-task" disabled title="正在加载项目">转换为项目任务</button>
                     </div>
                     <div class="code-mode-panel" id="code-mode-panel">
                         <div class="code-mode-fields">
-                            <div class="code-mode-field"><label for="code-repository">Repository</label><select id="code-repository" disabled><option>Loading repositories…</option></select></div>
-                            <div class="code-mode-field"><label for="code-base-branch">Base branch</label><select id="code-base-branch" disabled><option>Select a repository</option></select></div>
-                            <div class="code-mode-field"><label for="code-workflow">Workflow</label><select id="code-workflow" disabled><option>Loading workflows…</option></select></div>
-                            <div class="code-mode-field"><label for="code-agent-team">Agent team</label><select id="code-agent-team" disabled><option>Loading Agent team…</option></select></div>
+                            <div class="code-mode-field"><label for="code-repository">代码仓库</label><select id="code-repository" disabled><option>正在加载仓库…</option></select></div>
+                            <div class="code-mode-field"><label for="code-base-branch">基础分支</label><select id="code-base-branch" disabled><option>请选择仓库</option></select></div>
+                            <div class="code-mode-field"><label for="code-workflow">工作流</label><select id="code-workflow" disabled><option>正在加载工作流…</option></select></div>
+                            <div class="code-mode-field"><label for="code-agent-team">智能体团队</label><select id="code-agent-team" disabled><option>正在加载智能体团队…</option></select></div>
                         </div>
-                        <div class="code-quick-actions" aria-label="Code task shortcuts">
-                            <button type="button" class="code-quick-action">Fix a bug</button>
-                            <button type="button" class="code-quick-action">Add a feature</button>
-                            <button type="button" class="code-quick-action">Refactor code</button>
-                            <button type="button" class="code-quick-action">Write tests</button>
-                            <button type="button" class="code-quick-action">Review changes</button>
-                            <button type="button" class="code-quick-action">Explain repository</button>
+                        <div class="code-quick-actions" aria-label="代码任务快捷入口">
+                            <button type="button" class="code-quick-action">修复缺陷</button>
+                            <button type="button" class="code-quick-action">添加功能</button>
+                            <button type="button" class="code-quick-action">重构代码</button>
+                            <button type="button" class="code-quick-action">编写测试</button>
+                            <button type="button" class="code-quick-action">审查变更</button>
+                            <button type="button" class="code-quick-action">解释仓库</button>
                         </div>
-                        <p class="code-mode-note" id="code-mode-note">Repository selection uses server-approved sources. Every Code Task runs in an isolated Git worktree.</p>
+                        <p class="code-mode-note" id="code-mode-note">仓库只能从服务端批准的来源中选择。每个代码任务都在独立的 Git 工作树中运行。</p>
                     </div>
                 </div>
 
                 <!-- agentlist popup -->
                 <div id="chat-at-list-container-id" class="chat-at-list-container">
-                    <div class="chat-at-list-title">Agents</div>
+                    <div class="chat-at-list-title">智能体</div>
                     <ul id="chatAtListId" class="chat-at-list"></ul>
                 </div>
 
                 <div id="message_input_wrap">
-                    <textarea id="message_input" rows="1" placeholder="Ask me anything here."></textarea>
+                    <textarea id="message_input" rows="1" placeholder="请在这里输入你的问题。"></textarea>
                 </div>
                 <button class="file-upload-area" id="message_addtional">
                     <input
@@ -234,8 +288,8 @@
                     >
                     <img src="./image/group_addtion.svg" alt=""/>
                     <span class="file-tooltip">
-                        <span class="file-tooltip-title"> Upload attachments </span>
-                        <span class="file-tooltip-description">Max 10, 10MB each. Images, videos and table files are supported.</span>
+                        <span class="file-tooltip-title"> 上传附件 </span>
+                        <span class="file-tooltip-description">最多上传 10 个文件，每个不超过 10MB；支持图片、视频和表格文件。</span>
                     </span>
                 </button>
                 <button class="json-editor-btn" id="json_editor_toggle" onclick="toggleJsonEditor()">
@@ -247,14 +301,14 @@
                 <!-- Querys Panel -->
                 <div class="querys-panel" id="querys_panel" style="display:none;">
                     <div class="querys-panel-header">
-                        <span class="querys-panel-title">Queries</span>
+                        <span class="querys-panel-title">预设问题</span>
                     </div>
                     <ul class="querys-list" id="querys_list"></ul>
                 </div>
                 <!-- JSON Editor Panel -->
                 <div class="json-editor-panel" id="json_editor_panel" style="display:none;">
                     <div class="json-editor-header">
-                        <span class="json-editor-title">Request Data</span>
+                        <span class="json-editor-title">请求数据</span>
                     </div>
                     <div class="json-editor-body">
                         <div class="json-editor-field">
@@ -269,14 +323,15 @@
                         </div>
                     </div>
                     <div class="json-editor-footer">
-                        <button class="json-editor-btn-clear" onclick="clearJsonEditor()">Clear</button>
-                        <button class="json-editor-btn-cancel" onclick="cancelJsonEditor()">Cancel</button>
-                        <button class="json-editor-btn-apply" onclick="applyJsonEditor()">Apply</button>
+                        <button class="json-editor-btn-clear" onclick="clearJsonEditor()">清空</button>
+                        <button class="json-editor-btn-cancel" onclick="cancelJsonEditor()">取消</button>
+                        <button class="json-editor-btn-apply" onclick="applyJsonEditor()">应用</button>
                     </div>
                 </div>
                 <button id="message_send" onclick="send_message()">
                     <img src="./image/up_arrow.svg" alt=""/>
                 </button>
+                <div class="chat-composer-footnote">Enter 发送 · Shift + Enter 换行 · 回复可能存在误差，请核验重要信息</div>
             </div>
         </div>
     </div>
@@ -301,7 +356,7 @@
 <div id="restart-modal" class="restart-modal-overlay" style="display:none;">
     <div class="restart-modal">
         <div class="restart-modal-header">
-            <span>Edit Node Output & Restart</span>
+            <span>编辑节点输出并重新运行</span>
             <button type="button" class="restart-modal-close">&times;</button>
         </div>
         <div class="restart-modal-body">
@@ -311,8 +366,8 @@
             <textarea id="restart-output-editor" rows="12" spellcheck="false"></textarea>
         </div>
         <div class="restart-modal-footer">
-            <button type="button" id="restart-modal-cancel">Cancel</button>
-            <button type="button" id="restart-modal-confirm">Confirm & Restart</button>
+            <button type="button" id="restart-modal-cancel">取消</button>
+            <button type="button" id="restart-modal-confirm">确认并重新运行</button>
         </div>
     </div>
 </div>
@@ -327,8 +382,8 @@
         <div class="tour-tooltip-step">
             <span class="tour-tooltip-counter" id="tour-counter"></span>
             <div class="tour-tooltip-nav">
-                <button class="tour-tooltip-btn" id="tour-skip-btn" onclick="endGuideTour()">Skip</button>
-                <button class="tour-tooltip-btn primary" id="tour-next-btn" onclick="nextGuideTourStep()">Next</button>
+                <button class="tour-tooltip-btn" id="tour-skip-btn" onclick="endGuideTour()">跳过</button>
+                <button class="tour-tooltip-btn primary" id="tour-next-btn" onclick="nextGuideTourStep()">下一步</button>
             </div>
         </div>
     </div>
@@ -338,7 +393,7 @@
 <script>
     var ws = null;
     var from_trace_id = "";
-    var first_chat = "How may I support your request today?";
+    var first_chat = "您好，我是中远海运智能协作助手。请告诉我您希望研究、分析或推进的任务。";
 
     var last_tool_call_path = [];
     var last_tool_call_name = "";
@@ -374,7 +429,7 @@
         branchCounter++;
         var b = {
             id: "branch_" + branchCounter,
-            label: "Branch " + branchCounter,
+            label: "分支 " + branchCounter,
             parentBranchId: parentBranchId,
             forkFrameIndex: forkFrameIndex,
             traceId: "",
@@ -1479,7 +1534,7 @@
         })
             .then(function (response) {
                 if (!response.ok) {
-                    throw new Error("Request failed");
+                    throw new Error("请求失败");
                 }
                 return response.json();
             })
@@ -1507,12 +1562,12 @@
         var likeSvg = '<svg viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>';
         var dislikeSvg = '<svg viewBox="0 0 24 24"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path></svg>';
 
-        var likeBtn = $('<button type="button" class="btn-icon like" title="Good response">' + likeSvg + '</button>');
-        var dislikeBtn = $('<button type="button" class="btn-icon dislike" title="Bad response">' + dislikeSvg + '</button>');
+        var likeBtn = $('<button type="button" class="btn-icon like" title="回答有帮助">' + likeSvg + '</button>');
+        var dislikeBtn = $('<button type="button" class="btn-icon dislike" title="回答有问题">' + dislikeSvg + '</button>');
 
         // Feedback Panel
         var feedbackPanel = $('<div class="feedback-panel">');
-        var feedbackHeader = $('<div class="feedback-header"><span>What\'s the issue?</span><span class="feedback-close">&times;</span></div>');
+        var feedbackHeader = $('<div class="feedback-header"><span>遇到了什么问题？</span><span class="feedback-close">&times;</span></div>');
         
         // Row 1: Options + Submit Button (Dynamic Slot 1)
         var row1 = $('<div class="feedback-row-1">');
@@ -1522,19 +1577,19 @@
         // Row 2: Input + Submit Button (Dynamic Slot 2)
         var row2 = $('<div class="feedback-row-2">');
         var inputWrapper = $('<div class="feedback-input-wrapper">');
-        var customInput = $('<input type="text" class="feedback-input" placeholder="(Optional) Tell us more about your experience">');
+        var customInput = $('<input type="text" class="feedback-input" placeholder="（可选）请补充说明你的体验">');
         inputWrapper.append(customInput);
         row2.append(inputWrapper);
 
         // Submit Button (Single instance moved around)
-        var submitBtn = $('<button class="feedback-submit-btn">Submit</button>');
+        var submitBtn = $('<button class="feedback-submit-btn">提交</button>');
 
         var reasons = [
-            "Offensive/Unsafe",
-            "Factually incorrect",
-            "Not helpful",
-            "Privacy concern",
-            "Other"
+            "冒犯性或不安全",
+            "事实不正确",
+            "没有帮助",
+            "隐私问题",
+            "其他"
         ];
 
         // Build Options
@@ -1553,7 +1608,7 @@
             var hasSelection = selectedTags.length > 0;
 
             selectedTags.each(function() {
-                if ($(this).text() === "Other") {
+                if ($(this).text() === "其他") {
                     isOtherSelected = true;
                 }
             });
@@ -1597,13 +1652,13 @@
             var finalReason = selectedReasons.join(", ");
             if (comment) {
                 if (finalReason) {
-                    finalReason += " | Details: " + comment;
+                    finalReason += " | 详情：" + comment;
                 } else {
                     finalReason = comment;
                 }
             }
             
-            submit_rating(container, "dislike", finalReason || "Unspecified feedback");
+            submit_rating(container, "dislike", finalReason || "未说明具体反馈");
             feedbackPanel.fadeOut(200);
         });
 
@@ -1699,28 +1754,28 @@
         renderTraceGraph();
     }
 
-    var START_NODE = '<div class="tg-node tg-node-start" title="Start">'
+    var START_NODE = '<div class="tg-node tg-node-start" title="开始">'
         + '<div class="tg-node-main">'
         + '<svg class="tg-node-icon-svg" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="#22c55e" stroke="#16a34a" stroke-width="1.5"/><polygon points="7.5,5.5 13,9 7.5,12.5" fill="#fff"/></svg>'
-        + '<span class="tg-node-callee">Start</span>'
+        + '<span class="tg-node-callee">开始</span>'
         + '</div></div>';
 
-    var END_NODE = '<div class="tg-node tg-node-end" title="End">'
+    var END_NODE = '<div class="tg-node tg-node-end" title="结束">'
         + '<div class="tg-node-main">'
         + '<svg class="tg-node-icon-svg" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="#ef4444" stroke="#dc2626" stroke-width="1.5"/><rect x="6.5" y="6.5" width="5" height="5" rx="0.5" fill="#fff"/></svg>'
-        + '<span class="tg-node-callee">End</span>'
+        + '<span class="tg-node-callee">结束</span>'
         + '</div></div>';
 
-    var RUNNING_NODE = '<div class="tg-node tg-node-running" title="Running">'
+    var RUNNING_NODE = '<div class="tg-node tg-node-running" title="运行中">'
         + '<div class="tg-node-main">'
         + '<svg class="tg-node-icon-svg tg-spin" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="6.5" fill="none" stroke="#e5e7eb" stroke-width="2"/><path d="M9 2.5 a6.5 6.5 0 0 1 6.5 6.5" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/></svg>'
-        + '<span class="tg-node-callee">Running</span>'
+        + '<span class="tg-node-callee">运行中</span>'
         + '</div></div>';
 
-    var TURN_SEPARATOR = '<div class="tg-node tg-node-turn" title="New Turn">'
+    var TURN_SEPARATOR = '<div class="tg-node tg-node-turn" title="新对话轮次">'
         + '<div class="tg-node-main">'
         + '<svg class="tg-node-icon-svg" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="#8b5cf6" stroke="#7c3aed" stroke-width="1.5"/><path d="M6 9h6M9 6v6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>'
-        + '<span class="tg-node-callee">New Turn</span>'
+        + '<span class="tg-node-callee">新轮次</span>'
         + '</div></div>';
 
     // Check if a turn separator should be inserted between nodes[i-1] and nodes[i].
@@ -1743,7 +1798,7 @@
             if (traceGraphData[k] && traceGraphData[k].length) { hasData = true; break; }
         }
         if (!hasData) {
-            $body.html('<div class="tg-empty">No LLM/tool nodes yet.</div>');
+            $body.html('<div class="tg-empty">暂无 LLM 或工具节点。</div>');
             return;
         }
         var roots = branches.filter(function(b) { return !b.parentBranchId; });
@@ -2004,7 +2059,7 @@
         var iconSrc = (n.node_type === 'llm' || n.node_type === 'model')
             ? './image/org_model.svg' : './image/org_tool.svg';
         var rerunBtn = (!llm_is_work && (n.node_type === 'llm' || n.node_type === 'model' || n.node_type === 'tool'))
-            ? '<button type="button" class="tg-node-rerun" title="ReRun from this node"'
+            ? '<button type="button" class="tg-node-rerun" title="从此节点重新运行"'
                 + ' data-node-id="' + escapeHtml(n.node_id) + '">'
                 + '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">'
                 + '<polygon points="2,1 9,5 2,9" fill="currentColor"/></svg></button>'
@@ -2194,6 +2249,10 @@
 
     function scroll_top_div_chat_history() {
         div_chat_history.stop();
+        if (document.getElementById('chat-welcome') && div_chatbox.find('li.me').length === 0) {
+            div_chat_history.scrollTop(0);
+            return;
+        }
         if (div_chat_history[0]) {
             div_chat_history.animate({
                 scrollTop: div_chat_history[0].scrollHeight
@@ -2548,7 +2607,7 @@
                 div_right.append($("<div class='job_desc_interval'>"));
             }
             if (agent_log.hasOwnProperty("intention") && Object.keys(agent_log["intention"]).length !== 0) {
-                div_right.append($("<h3>").text("Intention Understanding").css("color", "red"));
+                div_right.append($("<h3>").text("意图理解").css("color", "red"));
                 var a_tag = $("<a>").attr("href", "./node.html?id=" + agent_log["intention"].node_id).attr("target", "_blank").css("text-decoration", "none").css("color", "black");
                 var temp_div = $("<div>").addClass("planning").text(agent_log["intention"]["content"]);
                 a_tag.append(temp_div);
@@ -2573,11 +2632,11 @@
 
                         // Output header with toggle group and detail link
                         var outputHead = $("<div class='plannings-output-head'>");
-                        outputHead.append($("<span>").text('Output'));
+                        outputHead.append($("<span>").text('输出'));
                         var toggleGroup = $("<span class='output-toggle-group'>");
                         toggleGroup.append($("<button class='output-toggle-btn active' onclick='toggleOutputView(this, \"markdown\"); event.stopPropagation();'>").text('Markdown'));
-                        toggleGroup.append($("<button class='output-toggle-btn' onclick='toggleOutputView(this, \"raw\"); event.stopPropagation();'>").text('Raw'));
-                        toggleGroup.append($("<a class='output-detail-btn' title='View detail' onclick='event.stopPropagation();'>").attr("href", "./node.html?id=" + agent_log["plannings"][i].node_id).attr("target", "_blank").html('<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>'));
+                        toggleGroup.append($("<button class='output-toggle-btn' onclick='toggleOutputView(this, \"raw\"); event.stopPropagation();'>").text('原始文本'));
+                        toggleGroup.append($("<a class='output-detail-btn' title='查看详情' onclick='event.stopPropagation();'>").attr("href", "./node.html?id=" + agent_log["plannings"][i].node_id).attr("target", "_blank").html('<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>'));
                         outputHead.append(toggleGroup);
                         div_right.append(outputHead);
 
@@ -2608,17 +2667,17 @@
                         var node_actions = $("<div class='node-actions'>")
                             .attr("data-node-id", curNodeId);
                         node_actions.append(
-                            $("<button type='button' class='btn-locate' title='Locate in Trace Graph'>")
-                                .html('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Locate')
+                            $("<button type='button' class='btn-locate' title='在追踪图中定位'>")
+                                .html('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 定位')
                         );
                         if (curCalleeCategory === "llm" || curCalleeCategory === "tool") {
                             node_actions.append(
-                                $("<button type='button' class='btn-restart' title='Restart from this node'>")
-                                    .html("<span class='node-action-icon'>&#9654;</span> ReRun")
+                                $("<button type='button' class='btn-restart' title='从此节点重新运行'>")
+                                    .html("<span class='node-action-icon'>&#9654;</span> 重新运行")
                             );
                             node_actions.append(
-                                $("<button type='button' class='btn-edit-restart' title='Edit output and restart'>")
-                                    .html("<span class='node-action-icon'>&#9998;</span> Edit & ReRun")
+                                $("<button type='button' class='btn-edit-restart' title='编辑输出并重新运行'>")
+                                    .html("<span class='node-action-icon'>&#9998;</span> 编辑并重新运行")
                             );
                         }
                         timelineContainer.append(node_actions);
@@ -3054,18 +3113,18 @@
 
         if (index === 0) {
             info.actionType = 'init';
-            info.label = 'Start';
-            info.detail = 'Initial state';
+            info.label = '开始';
+            info.detail = '初始状态';
         } else if (answer.length > 0 && answer[answer.length - 1].role === 'user') {
             info.actionType = 'user';
-            info.label = 'User';
+            info.label = '用户';
             var msg = answer[answer.length - 1].content || '';
             info.detail = msg.length > 30 ? msg.substring(0, 28) + '...' : msg;
         } else if (agentLog.plannings && agentLog.plannings.length > 0) {
             var last = agentLog.plannings[agentLog.plannings.length - 1];
             if (last.type === 'observation') {
                 info.actionType = 'observation';
-                info.label = last.callee || info.agentName || 'Tool';
+                info.label = last.callee || info.agentName || '工具';
             } else {
                 info.actionType = 'llm';
                 info.label = info.agentName || 'LLM';
@@ -3074,7 +3133,7 @@
             if (info.detail.length > 30) info.detail = info.detail.substring(0, 28) + '...';
         } else {
             info.actionType = 'agent';
-            info.label = info.agentName || ('Frame ' + (index + 1));
+            info.label = info.agentName || ('帧 ' + (index + 1));
             info.detail = agentLog.job_desc || '';
             if (info.detail.length > 30) info.detail = info.detail.substring(0, 28) + '...';
         }
@@ -3491,31 +3550,31 @@
         {
             id: 'New',
             value: 'New',
-            label: 'New',
+            label: '新建',
             image: './image/group_add.svg',
         },
         {
             id: 'Import',
             value: 'Import',
-            label: 'Import',
+            label: '导入',
             image: './image/group_open.svg',
         },
         {
             id: 'Load',
             value: 'Load',
-            label: 'Load',
+            label: '加载',
             image: './image/group_recent.svg',
         },
         {
             id: 'Save',
             value: 'Save',
-            label: 'Save',
+            label: '保存',
             image: './image/group_save.svg',
         },
         {
             id: 'Export',
             value: 'Export',
-            label: 'Export',
+            label: '导出',
             image: './image/group_export.svg',
         }
     ];
@@ -3903,71 +3962,71 @@
         {
             selector: '.cascader',
             icon: '\u{1F4C2}',
-            title: 'File Manager',
-            desc: 'Import/export conversation sessions as JSON. Save your work, load previous sessions, or share agent interactions with your team.',
+            title: '文件管理',
+            desc: '以 JSON 格式导入或导出对话会话。可保存当前工作、加载历史会话或与团队共享智能体交互记录。',
             tooltipPos: 'below'
         },
         {
             selector: '.header-left .btn-nav-toggle:nth-of-type(1)',
             icon: '\u{1F4DA}',
-            title: 'History',
-            desc: 'Open the History page to browse, search, filter, and rate past conversations. Quickly locate and replay previous agent sessions.',
+            title: '历史记录',
+            desc: '打开历史记录页面，浏览、搜索、筛选并评价过往对话，快速定位和重放智能体会话。',
             tooltipPos: 'below'
         },
         {
             selector: '.header-left .btn-nav-toggle:nth-of-type(2)',
             icon: '\u{270F}️',
-            title: 'Prompts',
-            desc: 'Open the Prompt Manager to edit, version, diff, and hot-reload system prompts at runtime — no service restart needed.',
+            title: '提示词',
+            desc: '打开提示词管理器，在运行时编辑、版本化、对比并热加载系统提示词，无需重启服务。',
             tooltipPos: 'below'
         },
         {
             selector: '.header-right .control',
             icon: '\u{23EF}️',
-            title: 'Playback Controls',
-            desc: 'Step-by-step replay: rewind to start, step back, play/pause auto-play, step forward, jump to end. Debug agent execution frame by frame.',
+            title: '回放控制',
+            desc: '逐步回放执行过程：回到开头、后退一步、播放/暂停自动回放、前进一步或跳到结尾。',
             tooltipPos: 'below'
         },
         {
             selector: '#btn-timeline-toggle',
             icon: '\u{1F4CF}',
-            title: 'Steps Timeline',
-            desc: 'Toggle the step timeline bar. Shows each execution step on a horizontal track with branch support for navigating parallel traces.',
+            title: '步骤时间线',
+            desc: '切换步骤时间线，在水平轨道上显示每个执行步骤，并支持通过分支浏览并行追踪。',
             tooltipPos: 'below'
         },
         {
             selector: '#btn-tracegraph-toggle',
             icon: '\u{1F332}',
-            title: 'Trace Graph',
-            desc: 'Toggle the trace graph panel. Visualizes conversation branching as a tree — fork, compare, and navigate between different execution paths.',
+            title: '追踪图',
+            desc: '切换追踪图面板，以树形结构展示对话分支，支持派生、比较和浏览不同执行路径。',
             tooltipPos: 'below'
         },
         {
             selector: '.container > .center',
             icon: '\u{1F5FA}️',
-            title: 'Organization Tree',
-            desc: 'Interactive agent hierarchy visualization. See how agents are organized, their types, tools, and LLM configurations. Supports zoom, pan, and minimap.',
+            title: '组织树',
+            desc: '交互式展示智能体层级，以及智能体类型、工具和 LLM 配置，并支持缩放、平移和小地图。',
             tooltipPos: 'right'
         },
         {
             selector: '.container > .left',
             icon: '\u{1F4AC}',
-            title: 'Chat Playground',
-            desc: 'Main conversation panel. Send messages, upload files, use @mention to target specific agents. Supports Markdown rendering and SSE streaming.',
+            title: '对话调试台',
+            desc: '主对话面板。可发送消息、上传文件，并使用 @ 提及指定智能体；支持 Markdown 渲染和 SSE 流式输出。',
             tooltipPos: 'left'
         },
         {
             selector: '#chat_send',
             icon: '\u{2328}️',
-            title: 'Input & Attachments',
-            desc: 'Rich input area: type messages, upload files (images, docs, code), add shared/group data via JSON editor, and @mention agents for direct routing.',
+            title: '输入与附件',
+            desc: '在输入区输入消息、上传图片/文档/代码文件，通过 JSON 编辑器添加共享数据，并使用 @ 提及进行定向路由。',
             tooltipPos: 'above'
         },
         {
             selector: '.container > .right',
             icon: '\u{1F4CB}',
-            title: 'Agent Detail Panel',
-            desc: 'Click any agent node to inspect execution details: input/output, tool calls, LLM interactions, token usage, and timing information.',
+            title: '智能体详情面板',
+            desc: '点击智能体节点查看执行详情，包括输入/输出、工具调用、LLM 交互、Token 用量和耗时。',
             tooltipPos: 'left'
         }
     ];
@@ -4061,7 +4120,7 @@
             document.getElementById('tour-desc').textContent = step.desc;
             document.getElementById('tour-counter').textContent = (index + 1) + ' / ' + _guideTourSteps.length;
             var nextBtn = document.getElementById('tour-next-btn');
-            nextBtn.textContent = (index === _guideTourSteps.length - 1) ? 'Finish' : 'Next';
+            nextBtn.textContent = (index === _guideTourSteps.length - 1) ? '完成' : '下一步';
         }
 
         if (firstShow) {
